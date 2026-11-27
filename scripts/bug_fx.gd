@@ -3,7 +3,7 @@ extends Node3D
 
 const BLOOD := Color("#6e2028")
 const BLOOD_EDGE := Color("#2e1016")
-const SHELL := Color("#8b624a")
+const SHELL := Color("#53565b")
 const DROP_LIMIT := 160
 const CHIP_LIMIT := 64
 

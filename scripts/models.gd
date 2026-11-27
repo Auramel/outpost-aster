@@ -2,10 +2,6 @@ class_name AsterModels
 extends RefCounted
 
 const VIEWMODEL_LAYER := 1 << 19
-const DUST := preload("res://assets/art/materials/field_dust.jpg")
-const DUST_NORMAL := preload("res://assets/art/materials/field_dust_normal.png")
-const STRATA := preload("res://assets/art/materials/field_strata.jpg")
-const STRATA_NORMAL := preload("res://assets/art/materials/field_strata_normal.png")
 const ALLOY := preload("res://assets/art/materials/field_alloy.jpg")
 const ALLOY_NORMAL := preload("res://assets/art/materials/field_alloy_normal.png")
 const PARKERIZED := preload("res://assets/art/materials/parkerized.jpg")
@@ -20,21 +16,39 @@ const POLYMER_ROUGHNESS := preload("res://assets/art/materials/polymer_roughness
 const ARMORY := preload("res://assets/art/materials/armory.jpg")
 const ARMORY_NORMAL := preload("res://assets/art/materials/armory_normal.png")
 const ARMORY_ROUGHNESS := preload("res://assets/art/materials/armory_roughness.png")
-const SKY := preload("res://assets/art/materials/amber_panorama.jpg")
+const CHITIN := preload("res://assets/art/materials/dune_chitin.png")
+const CHITIN_NORMAL := preload("res://assets/art/materials/dune_chitin_normal.png")
+const CANYON_GRAVEL := preload("res://assets/art/materials/canyon_gravel.jpg")
+const CANYON_GRAVEL_NORMAL := preload("res://assets/art/materials/canyon_gravel_normal.png")
+const CANYON_GRAVEL_ROUGHNESS := preload("res://assets/art/materials/canyon_gravel_roughness.png")
+const CANYON_ROCK := preload("res://assets/art/materials/canyon_sandstone.jpg")
+const CANYON_ROCK_NORMAL := preload("res://assets/art/materials/canyon_sandstone_normal.png")
+const CANYON_ROCK_ROUGHNESS := preload("res://assets/art/materials/canyon_sandstone_roughness.png")
+const CANYON_CONCRETE := preload("res://assets/art/materials/canyon_bunker.jpg")
+const CANYON_CONCRETE_NORMAL := preload("res://assets/art/materials/canyon_bunker_normal.png")
+const CANYON_CONCRETE_ROUGHNESS := preload("res://assets/art/materials/canyon_bunker_roughness.png")
+const CANYON_ARMOR := preload("res://assets/art/materials/canyon_armor.jpg")
+const CANYON_ARMOR_NORMAL := preload("res://assets/art/materials/canyon_armor_normal.png")
+const CANYON_ARMOR_ROUGHNESS := preload("res://assets/art/materials/canyon_armor_roughness.png")
+const SKY := preload("res://assets/art/materials/day_panorama.jpg")
 const PARTS := {
 	&"carbine": preload("res://assets/art/models/aster_carbine.glb"),
 	&"carbine_magazine": preload("res://assets/art/models/aster_carbine_magazine.glb"),
 	&"carbine_support": preload("res://assets/art/models/aster_carbine_support.glb"),
+	&"carbine_grip": preload("res://assets/art/models/aster_carbine_grip.glb"),
 	&"repair": preload("res://assets/art/models/field_repair_tool.glb"),
 	&"turret_base": preload("res://assets/art/models/turret_base.glb"),
 	&"turret_head": preload("res://assets/art/models/turret_head.glb"),
 	&"turret_emitters": preload("res://assets/art/models/turret_emitters.glb"),
+	&"turret_cartridge": preload("res://assets/art/models/turret_cartridge.glb"),
 	&"turret_wreck": preload("res://assets/art/models/turret_wreck.glb"),
 	&"bug": preload("res://assets/art/models/dune_beetle.glb"),
 	&"leg_left": preload("res://assets/art/models/beetle_leg_left.glb"),
 	&"leg_right": preload("res://assets/art/models/beetle_leg_right.glb"),
 	&"claw_left": preload("res://assets/art/models/beetle_claw_left.glb"),
 	&"claw_right": preload("res://assets/art/models/beetle_claw_right.glb"),
+	&"bug_tail": preload("res://assets/art/models/beetle_tail.glb"),
+	&"bug_sting": preload("res://assets/art/models/beetle_sting.glb"),
 	&"wall": preload("res://assets/art/models/wall_segment.glb"),
 	&"gate_frame": preload("res://assets/art/models/gate_frame.glb"),
 	&"gate_panels": preload("res://assets/art/models/gate_panels.glb"),
@@ -43,11 +57,13 @@ const PARTS := {
 	&"supply": preload("res://assets/art/models/supply_rack.glb"),
 	&"drone": preload("res://assets/art/models/supply_drone.glb"),
 	&"breach": preload("res://assets/art/models/breach_debris.glb"),
-	&"screen_rock": preload("res://assets/art/models/sandstone_screen.glb"),
+	&"canyon_ridge": preload("res://assets/art/models/canyon_ridge.glb"),
+	&"canyon_spur": preload("res://assets/art/models/canyon_spur.glb"),
+	&"canyon_cut": preload("res://assets/art/models/canyon_cut.glb"),
+	&"canyon_bastion": preload("res://assets/art/models/canyon_bastion.glb"),
 	&"stone_1": preload("res://assets/art/models/eroded_boulder_1.glb"),
 	&"stone_2": preload("res://assets/art/models/eroded_boulder_2.glb"),
 	&"stone_3": preload("res://assets/art/models/eroded_boulder_3.glb"),
-	&"mesa": preload("res://assets/art/models/tabletop_mesa.glb"),
 	&"scrub": preload("res://assets/art/models/ironleaf_scrub.glb"),
 }
 
@@ -85,9 +101,10 @@ static func floor_finish() -> StandardMaterial3D:
 	if _ground_material == null:
 		_ground_material = StandardMaterial3D.new()
 		_ground_material.vertex_color_use_as_albedo = true
-		_ground_material.albedo_color = Color("#dbd6c9")
+		_ground_material.albedo_color = Color("#fff5e5")
 		_ground_material.roughness = 0.94
-		_set_maps(_ground_material, DUST, DUST_NORMAL, 0.66)
+		_ground_material.metallic_specular = 0.22
+		_set_maps(_ground_material, CANYON_GRAVEL, CANYON_GRAVEL_NORMAL, 0.67, CANYON_GRAVEL_ROUGHNESS)
 	return _ground_material
 
 static func cliff_finish() -> StandardMaterial3D:
@@ -95,7 +112,8 @@ static func cliff_finish() -> StandardMaterial3D:
 		_cliff_material = StandardMaterial3D.new()
 		_cliff_material.vertex_color_use_as_albedo = true
 		_cliff_material.roughness = 0.91
-		_set_maps(_cliff_material, STRATA, STRATA_NORMAL, 0.82)
+		_cliff_material.metallic_specular = 0.23
+		_set_maps(_cliff_material, CANYON_ROCK, CANYON_ROCK_NORMAL, 0.72, CANYON_ROCK_ROUGHNESS)
 	return _cliff_material
 
 static func deck_finish() -> StandardMaterial3D:
@@ -105,7 +123,7 @@ static func deck_finish() -> StandardMaterial3D:
 		_deck_material.metallic = 0.46
 		_deck_material.metallic_specular = 0.38
 		_deck_material.roughness = 0.72
-		_set_maps(_deck_material, PAINTED, PAINTED_NORMAL, 0.88, PAINTED_ROUGHNESS)
+		_set_maps(_deck_material, CANYON_ARMOR, CANYON_ARMOR_NORMAL, 0.78, CANYON_ARMOR_ROUGHNESS)
 		_deck_material.uv1_scale = Vector3(2.0, 2.0, 1.0)
 	return _deck_material
 
@@ -141,6 +159,21 @@ static func _finish(original: StandardMaterial3D) -> StandardMaterial3D:
 				_set_maps(material, PAINTED, PAINTED_NORMAL, 0.91, PAINTED_ROUGHNESS)
 			"BarrelSteel":
 				_set_maps(material, PARKERIZED, PARKERIZED_NORMAL, 0.7, PARKERIZED_ROUGHNESS)
+			"TurretEnamel":
+				_set_maps(material, PAINTED, PAINTED_NORMAL, 0.78, PAINTED_ROUGHNESS)
+			"TurretCast", "CharredTurret":
+				material.metallic_specular = 0.41
+				_set_maps(material, PARKERIZED, PARKERIZED_NORMAL, 0.61, PARKERIZED_ROUGHNESS)
+			"TurretScanLamp":
+				material.metallic_specular = 0.48
+			"CarbineSatin":
+				material.metallic_specular = 0.49
+				_set_maps(material, PARKERIZED, PARKERIZED_NORMAL, 0.70, PARKERIZED_ROUGHNESS)
+			"CarbineAccent":
+				_set_maps(material, PAINTED, PAINTED_NORMAL, 0.73, PAINTED_ROUGHNESS)
+			"GripPolymer", "GloveFabric":
+				material.metallic_specular = 0.28
+				_set_maps(material, POLYMER, POLYMER_NORMAL, 0.5, POLYMER_ROUGHNESS)
 			"ColdReceiver":
 				material.albedo_color = Color("#b0c2dd")
 				material.metallic_specular = 0.49
@@ -159,22 +192,32 @@ static func _finish(original: StandardMaterial3D) -> StandardMaterial3D:
 			"Concrete":
 				material.albedo_color = Color("#cfcbc1")
 				_set_maps(material, ARMORY, ARMORY_NORMAL, 0.91, ARMORY_ROUGHNESS)
-			"Rock", "StoneDark":
-				_set_maps(material, STRATA, STRATA_NORMAL, 0.66)
-			"Shell", "Ridge":
-				material.albedo_color = material.albedo_color.lightened(0.12)
-				_set_maps(material, DUST, ARMORY_NORMAL, 0.49)
-			"Horn", "Membrane":
+			"BunkerConcrete":
+				_set_maps(material, CANYON_CONCRETE, CANYON_CONCRETE_NORMAL, 0.82, CANYON_CONCRETE_ROUGHNESS)
+			"BunkerArmor", "BunkerRim":
+				_set_maps(material, CANYON_ARMOR, CANYON_ARMOR_NORMAL, 0.76, CANYON_ARMOR_ROUGHNESS)
+			"Rock", "StoneDark", "CanyonLedge", "CanyonShade":
+				material.metallic_specular = 0.26
+				_set_maps(material, CANYON_ROCK, CANYON_ROCK_NORMAL, 0.72, CANYON_ROCK_ROUGHNESS)
+			"DuneChitin":
+				material.metallic_specular = 0.44
+				_set_maps(material, CHITIN, CHITIN_NORMAL, 0.73)
+			"DuneSinew":
 				material.normal_enabled = true
 				material.normal_texture = ARMORY_NORMAL
 				material.normal_scale = 0.32
 				material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 			"DryLeaf", "RedLeaf":
 				material.cull_mode = BaseMaterial3D.CULL_DISABLED
-		if finish.ends_with("Lamp") or finish == "Eye":
+		if finish.ends_with("Lamp"):
 			material.emission_enabled = true
 			material.emission = material.albedo_color
-			material.emission_energy_multiplier = 1.25
+			if finish == "DuneSporeLamp":
+				material.emission_energy_multiplier = 1.65
+			elif finish == "TurretScanLamp":
+				material.emission_energy_multiplier = 0.55
+			else:
+				material.emission_energy_multiplier = 1.25
 		_finishes[finish] = material
 	return _finishes[finish]
 

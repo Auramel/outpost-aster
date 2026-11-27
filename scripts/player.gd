@@ -1,14 +1,16 @@
 class_name AsterPlayer
 extends CharacterBody3D
 
-const HIP_POSITION := Vector3(0.313, -0.333, -0.58)
+const HIP_POSITION := Vector3(0.309, -0.326, -0.57)
 const REPAIR_POSITION := Vector3(0.30, -0.30, -0.53)
-const SUPPORT_GRIP := Vector3(-0.114, -0.120, -0.395)
-const MAGAZINE_SEAT := Vector3(0, -0.078, 0)
-const RELOAD_GRIP := Vector3(-0.087, -0.203, -0.14)
-const AIM_POSITION := Vector3(0, -0.210, -0.47)
-const MUZZLE := Vector3(0, 0.035, -0.801)
-const EJECTION_PORT := Vector3(0.176, 0.056, 0.037)
+const FIRING_GRIP := Vector3(0.035, -0.172, 0.134)
+const SUPPORT_GRIP := Vector3(-0.074, -0.179, -0.574)
+const MAGAZINE_SEAT := Vector3(0, -0.120, -0.268)
+const RELOAD_GRIP := Vector3(-0.099, -0.254, -0.276)
+const SIGHT_HEIGHT := 0.211
+const AIM_POSITION := Vector3(0, -SIGHT_HEIGHT, -0.61)
+const MUZZLE := Vector3(0, 0.027, -0.998)
+const EJECTION_PORT := Vector3(0.155, 0.049, -0.049)
 const REPAIR_TIP := Vector3(0, 0.028, -0.53)
 const AIM_TRANSITION := 0.16
 const STAND_HEIGHT := 1.69
@@ -46,7 +48,7 @@ var _rifle := Node3D.new()
 var _repair_tool := Node3D.new()
 var _rifle_magazine: MeshInstance3D
 var _support_hand: MeshInstance3D
-var _gun_flash: Sprite3D
+var _gun_flash: MeshInstance3D
 var _flash_light: OmniLight3D
 var _shot_timer := 0.0
 var _repair_beep := 0.0
@@ -73,7 +75,7 @@ func setup(game: Node, spawn: Vector3) -> void:
 	eye.position.y = STAND_EYE
 	eye.fov = _balance.hip_fov
 	eye.near = 0.055
-	eye.far = 117.0
+	eye.far = 186.0
 	add_child(eye)
 	eye.make_current()
 	eye.add_child(_weapon_slot)
@@ -93,6 +95,7 @@ func _build_tools() -> void:
 	_rifle_magazine.layers = AsterModels.VIEWMODEL_LAYER
 	_support_hand = AsterModels.attach(_rifle, &"carbine_support", SUPPORT_GRIP, Vector3.ONE, false)
 	_support_hand.layers = AsterModels.VIEWMODEL_LAYER
+	AsterModels.attach(_rifle, &"carbine_grip", FIRING_GRIP, Vector3.ONE, false).layers = AsterModels.VIEWMODEL_LAYER
 	rifle_tuning.setup(_balance, _rifle)
 	AsterModels.attach(_repair_tool, &"repair", Vector3.ZERO, Vector3.ONE, false).layers = AsterModels.VIEWMODEL_LAYER
 	var fill := OmniLight3D.new()
@@ -102,10 +105,8 @@ func _build_tools() -> void:
 	fill.omni_range = 2.4
 	fill.light_cull_mask = AsterModels.VIEWMODEL_LAYER
 	eye.add_child(fill)
-	_gun_flash = AsterEffects.muzzle_sprite(_rifle, MUZZLE + Vector3.FORWARD * 0.23)
-	_gun_flash.scale = Vector3.ONE * 0.51
+	_gun_flash = AsterEffects.rifle_flash(_rifle, MUZZLE)
 	_gun_flash.layers = AsterModels.VIEWMODEL_LAYER
-	_gun_flash.no_depth_test = true
 	_gun_flash.hide()
 	_flash_light = OmniLight3D.new()
 	_flash_light.position = MUZZLE
@@ -231,8 +232,8 @@ func _update_aim(delta: float, aiming: bool) -> void:
 	pose.z += _recoil * lerpf(1.0, 0.52, blend)
 	var progress := 1.0 - clampf(reload_left / _balance.rifle_reload, 0.0, 1.0)
 	var inspection := _pose_reload(progress)
-	_weapon_slot.position = pose + inspection * Vector3(0.04, -0.096, -0.06)
-	_weapon_slot.rotation = inspection * Vector3(0.25, 0.19, 0.39) + Vector3(_recoil * 0.41, 0, _recoil * 0.12)
+	_weapon_slot.position = pose + inspection * Vector3(-0.032, 0.057, -0.19)
+	_weapon_slot.rotation = inspection * Vector3(0.12, 0.36, 0.52) + Vector3(_recoil * 0.41, 0, _recoil * 0.12)
 	var fov := lerpf(_balance.hip_fov + _sprint_blend * 5.0, _balance.aim_fov, blend)
 	if eye.fov != fov:
 		eye.fov = fov
@@ -241,7 +242,7 @@ func _pose_reload(progress: float) -> float:
 	var tilt := smoothstep(0.0, 0.21, progress) * (1.0 - smoothstep(0.73, 1.0, progress))
 	var grip := smoothstep(0.08, 0.26, progress) * (1.0 - smoothstep(0.78, 0.99, progress))
 	var draw := smoothstep(0.24, 0.49, progress) * (1.0 - smoothstep(0.56, 0.83, progress))
-	var offset := draw * Vector3(-0.064, -0.224, 0.038)
+	var offset := draw * Vector3(-0.073, -0.243, 0.025)
 	_rifle_magazine.position = MAGAZINE_SEAT + offset
 	_rifle_magazine.rotation = Vector3(0.18, -0.12, -0.22) * draw
 	_support_hand.position = SUPPORT_GRIP.lerp(RELOAD_GRIP, grip) + offset * grip
@@ -303,7 +304,7 @@ func fire_rifle() -> void:
 	magazine -= 1
 	_shot_timer += 1.0 / rifle_tuning.stat(AsterRifleTuning.Path.RATE)
 	_firing_visual = 0.058
-	_gun_flash.scale = Vector3.ONE * randf_range(0.43, 0.59)
+	_gun_flash.scale = Vector3.ONE * randf_range(0.84, 1.16)
 	_gun_flash.show()
 	_flash_light.show()
 	_game.effects.muzzle_gas(_rifle.to_global(MUZZLE), -_rifle.global_basis.z, false)

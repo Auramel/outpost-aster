@@ -21,21 +21,33 @@ MATERIALS = {
     "Concrete": ("bdc4c2", 0.0, 0.87),
     "Rock": ("dcba94", 0.0, 0.91),
     "StoneDark": ("aa896d", 0.0, 0.94),
-    "Shell": ("564639", 0.04, 0.49),
-    "Ridge": ("986443", 0.06, 0.57),
-    "Membrane": ("553936", 0.0, 0.66),
+    "DuneChitin": ("dedee0", 0.04, 0.57),
+    "DuneSinew": ("35343a", 0.0, 0.70),
+    "DuneEyeLamp": ("ad6448", 0.0, 0.41, 0.55),
+    "DuneSporeLamp": ("9ade55", 0.0, 0.39, 1.0),
     "IceLamp": ("78dcff", 0.0, 0.55, 0.8),
     "AmberLamp": ("ffc47c", 0.0, 0.54, 0.55),
-    "Horn": ("423e36", 0.0, 0.49),
+    "CarbineSatin": ("a8b7c7", 0.45, 0.43),
+    "CarbineAccent": ("ac5132", 0.26, 0.63),
+    "GripPolymer": ("353b43", 0.0, 0.78),
+    "GloveFabric": ("525c66", 0.0, 0.85),
     "ColdReceiver": ("5a6779", 0.42, 0.55),
     "Cowl": ("4d5648", 0.25, 0.66),
     "SignalLamp": ("db4637", 0.0, 0.53, 0.52),
+    "TurretEnamel": ("788378", 0.28, 0.62),
+    "TurretCast": ("818b91", 0.45, 0.49),
+    "TurretScanLamp": ("53bcb3", 0.22, 0.29, 0.62),
+    "CharredTurret": ("464034", 0.32, 0.78),
     "BarrelSteel": ("454b51", 0.48, 0.53),
     "ScuffedEdge": ("81868a", 0.46, 0.61),
     "OliveMetal": ("77725b", 0.43, 0.46),
+    "CanyonLedge": ("e4dacd", 0.0, 0.89),
+    "CanyonShade": ("b9a79b", 0.0, 0.92),
+    "BunkerConcrete": ("c2c7c2", 0.0, 0.86),
+    "BunkerArmor": ("b7bdc0", 0.28, 0.69),
+    "BunkerRim": ("889ba2", 0.40, 0.55),
     "DryLeaf": ("625338", 0.0, 0.85),
     "RedLeaf": ("9e4c39", 0.0, 0.67),
-    "Eye": ("f58c54", 0.0, 0.56, 0.55),
 }
 
 
@@ -259,106 +271,165 @@ def grip_hand(model, center, direction, support=False):
         model.ellipsoid("Rubber", finger, (.034, .023, .037), 9, 5)
 
 
-def bridge_rail(model, center):
-    """Form one cheek of the bridge, with a beveled opening through the side."""
-    outer = [(.129, -.561), (.221, -.525), (.310, -.382), (.321, .045),
-             (.288, .231), (.140, .286)]
-    opening = [(.170, -.473), (.217, -.448), (.265, -.348), (.277, .019),
-               (.243, .176), (.172, .204)]
-    width = .041
-    bevel = .005
+def carbine_frame(model):
+    """Beveled sidewalls around the open stock, with a real void through the mesh."""
+    outer = [(.073, -.152), (.119, .092), (.107, .406), (.059, .498),
+             (-.174, .508), (-.241, .440), (-.290, .127), (-.227, .015),
+             (-.151, -.142), (-.041, -.235)]
+    window = [(.009, -.092), (.029, .103), (.018, .353), (-.016, .399),
+              (-.126, .408), (-.178, .365), (-.222, .141), (-.179, .049),
+              (-.122, -.046), (-.040, -.123)]
+    for i in range(len(outer)):
+        j = (i + 1) % len(outer)
+        for side in (-1, 1):
+            outside = [(side * .084, *outer[k]) for k in (i, j)]
+            rim = [(side * .110, *mix(outer[k], window[k], .19)) for k in (i, j)]
+            lip = [(side * .105, *mix(window[k], outer[k], .16)) for k in (i, j)]
+            inside = [(side * .081, *window[k]) for k in (i, j)]
+            facing = (side, 0, 0)
+            model.face("CarbineSatin", [*outside, *rim[::-1]], facing)
+            model.face("CarbineSatin", [*rim, *lip[::-1]], facing)
+            model.face("Black", [*lip, *inside[::-1]], facing)
+        for profile, depth, orientation in ((outer, .084, 1), (window, .081, -1)):
+            face = [(-depth, *profile[i]), (-depth, *profile[j]), (depth, *profile[j]), (depth, *profile[i])]
+            model.face("Black" if orientation < 0 else "CarbineSatin", face,
+                       mul(sub(mean(face), (0, *mean(profile))), orientation))
+
+
+def carbine_glove(model, *, leading=False):
+    """Sculpt one held pose used by the carbine's two viewmodel hands."""
+    sign = -1 if leading else 1
+    palm = (.026 * sign, -.010, .028)
+    wrist = (sign * .015, -.064, .100)
+    cuff = (sign * .065, -.115, .327 if leading else .249)
+    model.tube("GloveFabric", wrist, cuff, .061, .084, sides=12, section=(.92, 1))
+    model.tube("Graphite", mix(wrist, cuff, .67), mix(wrist, cuff, .96), .081, .093, sides=10, section=(.93, 1))
+    model.ellipsoid("GripPolymer", palm, (.069, .049, .087), sides=12, rows=7)
+    model.block("GloveFabric", (sign * .062, .008, .024), (.042, .070, .105), .014, axis=0)
+    for digit in range(4):
+        z = -.045 + digit * .023
+        fold = (.007 if leading else -.007, .020 + .003 * digit, z)
+        pad = (-sign * (.051 - digit * .004), .018, z + .013)
+        model.tube("GripPolymer", (sign * .041, -.017, z - .010), fold, .016, .015, sides=8)
+        model.tube("GripPolymer", fold, pad, .015, .012, sides=8)
+        model.block("GloveFabric", (sign * .040, .010, z), (.028, .024, .021), .005)
+    model.ellipsoid("GripPolymer", (sign * .057, .028, .061), (.021, .025, .053), sides=10, rows=5)
+
+
+def carbine_sight(model):
+    model.block("Black", (0, .173, -.081), (.177, .033, .139), .011)
     for side in (-1, 1):
-        face_x = center + side * width / 2
-        shoulder_x = face_x - side * bevel
-        for i in range(len(outer)):
-            j = (i + 1) % len(outer)
-            outer_edge = [outer[i], outer[j]]
-            inner_edge = [opening[i], opening[j]]
-            rim = [(face_x, *mix(outer[k], opening[k], .10)) for k in (i, j)]
-            lip = [(face_x, *mix(opening[k], outer[k], .12)) for k in (i, j)]
-            outside = [(shoulder_x, *point) for point in outer_edge]
-            inside = [(shoulder_x, *point) for point in inner_edge]
-            model.face("ColdReceiver", [rim[0], rim[1], lip[1], lip[0]], (side, 0, 0))
-            model.face("ScuffedEdge" if i in (2, 3) and side * center > 0 else "ColdReceiver",
-                       [outside[0], outside[1], rim[1], rim[0]], (side, 0, 0))
-            model.face("ColdReceiver", [lip[0], lip[1], inside[1], inside[0]], (side, 0, 0))
-    front = center - width / 2 + bevel
-    back = center + width / 2 - bevel
-    for outline, inward in ((outer, False), (opening, True)):
-        centerline = (center, *mean(outline))
-        for i in range(len(outline)):
-            j = (i + 1) % len(outline)
-            points = [(front, *outline[i]), (front, *outline[j]), (back, *outline[j]), (back, *outline[i])]
-            normal = sub(centerline, mean(points)) if inward else sub(mean(points), centerline)
-            model.face("Graphite" if inward else "ColdReceiver", points, normal)
+        # A low fork leaves a clean line through the window and gives the halo its shape.
+        model.profile("CarbineSatin", [(side * .053, .185), (side * .091, .181),
+                                      (side * .074, .250), (side * .048, .270),
+                                      (side * .038, .249), (side * .050, .224)],
+                      .077, .005, axis=2, center=(0, 0, -.098))
+        model.block("IceLamp", (side * .059, .206, -.051), (.010, .008, .005), .002)
+        model.block("Black", (side * .023, .163, -.825), (.018, .036, .052), .006)
+    model.block("CarbineSatin", (0, .262, -.104), (.117, .019, .070), .006)
+    model.block("Black", (0, .170, -.831), (.068, .019, .060), .006)
+    model.block("Steel", (0, .186, -.835), (.012, .022, .022), .003)
+    model.block("IceLamp", (0, .197, -.836), (.009, .005, .017), .002)
 
 
 def rifle():
-    m = Model("aster_carbine", 4.6)
-    m.profile("ColdReceiver", [(-.088, .286), (.108, .339), (.149, .167), (.128, -.471),
-                              (.103, -.647), (.013, -.681), (-.100, -.526), (-.137, -.191),
-                              (-.073, .109)], .267, .022)
-    m.profile("Graphite", [(-.098, .266), (.092, .291), (.111, .419), (-.053, .447),
-                           (-.122, .357)], .196, .021)
-    m.block("Rubber", (0, -.006, .429), (.205, .175, .054), .017, axis=2)
-    m.profile("Graphite", [(-.066, .024), (-.089, -.101), (-.203, -.042), (-.257, .050),
-                          (-.232, .114), (-.152, .084)], .129, .014)
-    m.block("Black", (0, -.076, -.152), (.159, .091, .250), .014, axis=1)
+    m = Model("aster_carbine", 4.5)
+    # Continuous upper chassis and the two offset rails of the split front.
+    m.profile("CarbineSatin", [(-.096, -.579), (.092, -.570), (.150, -.385),
+                              (.149, .002), (.092, .137), (-.079, .110), (-.140, -.158)], .233, .024)
+    m.profile("Graphite", [(-.129, -.480), (.034, -.459), (.061, -.300),
+                           (-.010, -.153), (-.107, -.105), (-.158, -.174), (-.168, -.378)], .221, .018)
+    m.profile("CarbineSatin", [(.068, -.975), (.119, -.972), (.159, -.912), (.166, -.555),
+                              (.158, -.346), (.110, -.319), (.074, -.444)], .227, .017)
+    m.profile("CarbineSatin", [(-.163, -.952), (-.110, -.984), (-.087, -.932),
+                              (-.092, -.546), (-.105, -.451), (-.155, -.442),
+                              (-.188, -.553), (-.185, -.855)], .228, .016)
+    m.profile("Graphite", [(-.175, -.928), (-.132, -.900), (-.115, -.654),
+                           (-.138, -.519), (-.183, -.527), (-.196, -.815)], .197, .011)
+    m.block("Black", (0, -.122, -.633), (.144, .059, .388), .014, axis=1)
+    m.tube("BarrelSteel", (0, .027, -.396), (0, .027, -.967), .057, .040, sides=14)
+    for z in (-.826, -.691, -.545):
+        m.tube("Graphite", (0, .027, z + .031), (0, .027, z - .022), .066, .063, sides=10, section=(1.05, 1))
+        m.tube("BarrelSteel", (0, .027, z - .020), (0, .027, z - .035), .064, .060, sides=10)
+    m.tube("BarrelSteel", (0, .027, -.947), (0, .027, -.987), .047, .042, sides=14)
+    m.tube("Black", (0, .027, -.978), (0, .027, -.995), .033, .026, sides=12)
+    carbine_frame(m)
+    m.profile("Graphite", [(-.070, .014), (.009, .071), (-.006, .132),
+                           (-.096, .143), (-.222, .224), (-.206, .120), (-.141, .060)], .109, .014)
+    m.profile("GripPolymer", [(-.116, .071), (-.091, .111), (-.119, .167),
+                              (-.208, .213), (-.217, .166), (-.168, .095)], .125, .014)
+    m.profile("Black", [(-.161, .459), (.033, .450), (.067, .490),
+                        (.050, .516), (-.179, .553), (-.204, .507)], .232, .020)
+    m.block("GripPolymer", (0, .109, .270), (.173, .016, .243), .006, axis=1)
+    for z in (.196, .222, .318, .344):
+        m.block("Graphite", (0, .118, z), (.128, .004, .008), .0018, axis=1)
+    m.block("Black", (0, -.103, -.268), (.191, .054, .234), .010, axis=1)
+    m.block("CarbineAccent", (.005, -.080, -.012), (.026, .049, .018), .004)
+
     for side in (-1, 1):
-        m.profile("Cowl", [(-.080, -.207), (-.055, -.420), (-.093, -.526), (-.049, -.628),
-                           (.030, -.664), (.114, -.584), (.113, -.302), (.079, -.224)],
-                  .043, .014, center=(side * .132, 0, 0))
-        # The outer frame and the recessed backing sit at different depths.
-        m.block("Black", (side * .158, .047, -.451), (.018, .049, .286), .005, axis=0)
-        for y in (.018, .076):
-            m.block("ColdReceiver", (side * .165, y, -.451), (.016, .015, .286), .003, axis=0)
-        for z in (-.589, -.530, -.474, -.423, -.365, -.312):
-            m.block("ColdReceiver", (side * .166, .046, z), (.017, .060, .015), .003, angle=-.16)
-        m.profile("ColdReceiver", [(-.042, -.191), (.103, -.219), (.134, -.146), (.116, .214),
-                                   (.061, .276), (-.047, .241)], .033, .011,
-                  center=(side * .139, 0, 0))
-        m.block("Black", (side * .158, .056, .018), (.015, .052, .140), .006)
-        if side > 0:
-            m.block("Steel", (side * .167, .061, .025), (.013, .020, .098), .004)
-        m.block("Hazard", (side * .161, -.012, -.140), (.006, .025, .064), .0018, angle=.39)
-        m.block("ScuffedEdge", (side * .159, .100, .131), (.005, .010, .161), .0015)
-        for z in (-.256, -.157, .166, .241):
-            rivet(m, (side * .156, .078 if z < 0 else .048, z), (side, 0, 0), .010, "ScuffedEdge")
-        for z in (.258, .296, .334):
-            m.block("Rubber", (side * .107, -.035, z), (.018, .076, .015), .003, angle=.28)
-        bridge_rail(m, side * .068)
-    m.block("ColdReceiver", (0, .299, -.352), (.157, .024, .102), .008)
-    m.block("ColdReceiver", (0, .306, .016), (.174, .035, .105), .010)
-    m.block("Graphite", (0, .133, -.493), (.193, .030, .133), .010)
-    for side in (-1, 1):
-        m.block("ScuffedEdge", (side * .032, .180, -.572), (.019, .056, .052), .007)
-        m.block("Black", (side * .036, .181, .218), (.023, .045, .034), .006)
-    m.block("AmberLamp", (0, .203, -.576), (.008, .010, .011), .002)
-    m.tube("Black", (0, .035, -.622), (0, .035, -.780), .042, .047, 12)
-    m.tube("ColdReceiver", (0, .035, -.671), (0, .035, -.757), .063, .058, 10, section=(1.17, .90))
-    m.tube("ScuffedEdge", (0, .035, -.756), (0, .035, -.772), .045, .041, 12)
-    m.tube("Black", (0, .035, -.773), (0, .035, -.785), .028, .025, 12)
-    grip_hand(m, (.043, -.148, .064), 1)
+        x = side * .12
+        m.profile("Graphite", [(.095, -.922), (.126, -.902), (.137, -.466),
+                               (.111, -.399), (.092, -.483)],
+                  .010, .003, center=(x, 0, 0))
+        m.profile("CarbineSatin", [(-.156, -.925), (-.121, -.941), (-.115, -.685),
+                                  (-.090, -.607), (-.126, -.522), (-.152, -.586), (-.171, -.800)],
+                  .032, .007, center=(side * .108, 0, 0))
+        for z in (-.865, -.729, -.603):
+            m.block("Black", (side * .130, -.131, z), (.015, .056, .063), .007, angle=-.32)
+            m.block("IceLamp", (side * .139, -.119, z - .005), (.007, .008, .028), .0015, angle=-.28)
+        for z in (-.820, -.684, -.547):
+            m.profile("BarrelSteel", [(-.079, z - .04), (-.040, z - .027),
+                                      (.077, z + .021), (.076, z + .054),
+                                      (.028, z + .034), (-.085, z - .001)],
+                      .022, .006, center=(side * .088, 0, 0))
+        m.profile("CarbineSatin", [(.029, -.447), (.115, -.411), (.139, -.194), (.107, -.173),
+                                  (.087, .061), (.046, .078), (-.017, .043), (-.017, -.324)],
+                  .038, .010, center=(side * .116, 0, 0))
+        m.profile("Graphite", [(-.070, -.423), (-.028, -.389), (-.028, -.198),
+                               (-.063, -.083), (-.107, -.142), (-.109, -.325)],
+                  .030, .009, center=(side * .115, 0, 0))
+        m.block("Black", (side * .140, .074, -.291), (.014, .045, .207), .008)
+        m.block("CarbineSatin", (side * .149, .081, -.296), (.006, .008, .174), .002)
+        for lane in range(4):
+            m.block("IceLamp", (side * .150, .073, -.351 + lane * .034),
+                    (.006, .016, .013), .002, angle=-.31)
+        m.block("Black", (side * .138, .050, -.049), (.015, .056, .132), .009)
+        m.block("BarrelSteel", (side * .147, .047, -.048), (.007, .026, .090), .003)
+        m.profile("CarbineAccent", [(-.012, .037), (.016, .038), (.041, .084), (.034, .116), (-.007, .085)],
+                  .014, .004, center=(side * .121, 0, 0))
+        m.block("ScuffedEdge", (side * .124, -.072, -.270), (.005, .009, .105), .002)
+        m.block("ScuffedEdge", (side * .115, -.199, .195), (.006, .011, .116), .002, angle=.12)
+        for z in (-.924, -.491, .169, .437):
+            y = .109 if z < -.4 else (-.221 if z < .3 else -.158)
+            rivet(m, (side * (.112 if z > 0 else .116), y, z), (side, 0, 0), .009, "ScuffedEdge")
+    for z in (-.722, -.602, -.469, -.343, -.245):
+        m.block("Graphite", (0, .157, z), (.104, .024, .060), .006, angle=.20, axis=1)
+    m.block("Black", (-.077, .147, -.237), (.054, .010, .122), .005, axis=1)
+    for z in (-.275, -.242, -.210):
+        m.block("IceLamp", (-.073, .154, z), (.025, .005, .011), .002, axis=1)
+    carbine_sight(m)
     return m
 
 
 def rifle_magazine():
     m = Model("aster_carbine_magazine", 4.9)
-    m.profile("ColdReceiver", [(.010, -.258), (.009, -.052), (-.164, -.019), (-.227, -.067),
-                               (-.253, -.199), (-.207, -.252)], .130, .013)
-    m.profile("Rubber", [(-.198, -.248), (-.191, -.142), (-.229, -.046), (-.267, -.066),
-                         (-.284, -.195), (-.247, -.245)], .147, .011)
+    m.profile("CarbineSatin", [(.021, -.100), (.016, .087), (-.095, .102),
+                              (-.178, .065), (-.213, -.057), (-.164, -.096)], .150, .014)
+    m.profile("GripPolymer", [(-.153, -.108), (-.174, .057), (-.204, .074),
+                              (-.229, .063), (-.246, -.064), (-.210, -.115)], .163, .015)
     for side in (-1, 1):
-        for index in range(3):
-            m.block("Graphite", (side * .069, -.118 - index * .027, -.111 + index * .019),
-                    (.014, .016, .114), .003, angle=.12)
-        m.block("ScuffedEdge", (side * .072, -.036, -.156), (.008, .014, .117), .002)
+        m.profile("Graphite", [(-.026, -.059), (-.036, .062), (-.102, .074),
+                               (-.162, .042), (-.175, -.046)], .018, .005,
+                  center=(side * .076, 0, 0))
+        for z in (-.033, .012, .054):
+            m.block("BarrelSteel", (side * .088, -.086, z), (.009, .051, .019), .003, angle=-.25)
+        m.block("ScuffedEdge", (side * .084, -.129, -.025), (.006, .009, .047), .002)
     return m
 
 
-def rifle_support():
-    m = Model("aster_carbine_support", 4.4)
-    grip_hand(m, (0, 0, 0), -1, True)
+def rifle_hand(leading):
+    m = Model("aster_carbine_support" if leading else "aster_carbine_grip", 4.5)
+    carbine_glove(m, leading=leading)
     return m
 
 
@@ -382,192 +453,483 @@ def repair_tool():
 
 
 def turret_base():
-    m = Model("turret_base", 2.0)
-    m.tube("Graphite", (0, .026, 0), (0, .107, 0), .602, .602, 8, smooth=False)
-    m.tube("Cowl", (0, .094, 0), (0, .210, 0), .623, .533, 8, smooth=False)
-    m.tube("Steel", (0, .213, 0), (0, .247, 0), .437, .427, 16)
-    m.tube("Black", (0, .239, 0), (0, .332, 0), .407, .405, 16)
-    m.tube("Cowl", (0, .325, 0), (0, .378, 0), .468, .445, 10, smooth=False)
-    for side in (-1, 1):
-        for direction in (-1, 1):
-            plate = (side * .550, .062, direction * .511)
-            yaw = -side * direction * .684
-            m.block("Cowl", plate, (.225, .110, .502), .026, angle=yaw, axis=1)
-            m.block("ScuffedEdge", (side * .558, .121, direction * .517),
-                    (.121, .024, .311), .006, angle=yaw, axis=1)
-            rivet(m, (side * .693, .121, direction * .673), (0, 1, 0), .037, "ScuffedEdge")
-        m.block("Cowl", (side * .306, .509, .058), (.171, .355, .364), .038, angle=-side * .14, axis=2)
-        m.block("Graphite", (side * .337, .583, .080), (.158, .152, .315), .022)
-        for direction in (-1, 1):
-            rivet(m, (side * .390, .461, direction * .091 + .065), (side, 0, 0), .026)
-    m.block("Graphite", (0, .422, .135), (.559, .137, .360), .029, axis=1)
-    for x in (-.17, .17):
-        m.block("Hazard", (x, .117, .533), (.064, .026, .089), .005, angle=.26, axis=1)
+    m = Model("turret_base", 2.45)
+    m.tube("TurretCast", (0, .022, 0), (0, .063, 0), .737, .750, sides=20, smooth=False)
+    m.tube("TurretEnamel", (0, .061, 0), (0, .114, 0), .750, .695, sides=20, smooth=False)
+    m.tube("Black", (0, .114, 0), (0, .269, 0), .629, .514, sides=18, smooth=False)
+    m.tube("TurretCast", (0, .254, 0), (0, .316, 0), .531, .565, sides=20)
+    m.tube("ScuffedEdge", (0, .318, 0), (0, .344, 0), .573, .578, sides=24)
+    m.tube("TurretEnamel", (0, .345, 0), (0, .400, 0), .579, .579, sides=24)
+    m.tube("Black", (0, .400, 0), (0, .455, 0), .553, .529, sides=20)
+    for index in range(14):
+        angle = 2 * pi * index / 14
+        radial = (sin(angle), 0, cos(angle))
+        # Center each chiseled rib in a spoke of the supporting cone.
+        inner = add(mul(radial, .535), (0, .245, 0))
+        outer = add(mul(radial, .653), (0, .110, 0))
+        tangent = (cos(angle), 0, -sin(angle))
+        near = [add(outer, mul(tangent, side * .044)) for side in (-1, 1)]
+        far = [add(inner, mul(tangent, side * .034)) for side in (-1, 1)]
+        m.face("TurretEnamel", [*near, *far[::-1]], add(radial, (0, .62, 0)))
+        rear = [sub(point, mul(radial, .042)) for point in near + far]
+        for side in (0, 1):
+            m.face("TurretCast", [near[side], far[side], rear[side + 2], rear[side]],
+                   mul(tangent, 1 if side else -1))
+        bolt = add(mul(radial, .703), (0, .101, 0))
+        rivet(m, bolt, (0, 1, 0), .022, "ScuffedEdge")
+    for index in range(8):
+        angle = 2 * pi * (index + .5) / 8
+        at = (sin(angle) * .577, .353, cos(angle) * .577)
+        m.block("TurretCast", at, (.077, .139, .046), .010, angle=-angle, axis=1)
+    m.block("Black", (0, .175, .623), (.215, .064, .043), .006, axis=2)
+    for x in (-.065, 0, .065):
+        m.block("Hazard", (x, .175, .646), (.036, .027, .007), .002, angle=.37, axis=2)
     return m
 
 
 def turret_head():
-    m = Model("turret_head", 2.1)
-    m.profile("Graphite", [(-.211, .419), (.106, .504), (.228, .333), (.182, -.278),
-                            (.034, -.386), (-.139, -.253), (-.211, .106)], .756, .042)
-    # High outer armor and exposed coaxial motors frame the elevating carriage.
-    m.profile("Cowl", [(.114, .455), (.259, .399), (.347, .206), (.299, -.239),
-                        (.151, -.360), (.106, -.181)], .864, .040)
+    m = Model("turret_head", 2.35)
+    m.tube("TurretEnamel", (0, -.387, 0), (0, -.272, 0), .466, .496, sides=18)
+    m.tube("ScuffedEdge", (0, -.269, 0), (0, -.244, 0), .495, .493, sides=22)
+    m.profile("TurretEnamel", [(-.283, .405), (.078, .548), (.229, .413), (.285, -.084),
+                               (.145, -.403), (-.104, -.479), (-.267, -.304)], .903, .050)
+    m.block("TurretCast", (0, -.219, -.419), (.730, .218, .204), .037, axis=2)
+    m.block("TurretEnamel", (0, .195, -.251), (.604, .216, .346), .044, axis=1)
+    m.block("TurretCast", (0, .313, -.175), (.506, .062, .303), .017, axis=1)
     for side in (-1, 1):
-        m.profile("Cowl", [(-.034, .433), (.229, .398), (.270, .241), (.208, -.296),
-                            (.029, -.360), (-.013, -.188)], .111, .025,
-                  center=(side * .399, 0, 0))
-        x = side * .401
-        m.tube("Graphite", (x, -.019, .018), (side * .473, -.019, .018), .189, .182, 16)
-        m.tube("ScuffedEdge", (side * .474, -.019, .018), (side * .492, -.019, .018), .155, .154, 16)
-        m.tube("Black", (side * .491, -.019, .018), (side * .514, -.019, .018), .131, .129, 16)
-        m.tube("Steel", (side * .512, -.019, .018), (side * .526, -.019, .018), .046, .043, 10)
-        for z in (.281, .366):
-            m.block("Black", (side * .462, .108, z), (.016, .036, .044), .004)
-    m.block("Graphite", (0, .045, .467), (.519, .225, .111), .019, axis=2)
-    for z in (.274, .350, .429):
-        m.block("ScuffedEdge", (-.184, .284, z), (.179, .013, .034), .003, axis=1)
-    m.profile("ColdReceiver", [(.167, -.251), (.335, -.198), (.378, -.095),
-                               (.316, .011), (.183, -.087)], .274, .025,
-              center=(.058, .001, 0))
-    m.tube("Black", (.059, .286, -.246), (.059, .278, -.296), .089, .075, 14)
-    m.tube("SignalLamp", (.059, .278, -.290), (.059, .276, -.305), .055, .056, 14)
-    m.block("AmberLamp", (-.063, .244, -.273), (.027, .014, .021), .004)
+        # Tall, swept trunnion cheeks give the elevation carriage a cradle.
+        m.profile("TurretCast", [(-.220, -.243), (.296, -.119), (.424, .177), (.341, .452),
+                                 (.032, .490), (-.251, .218)], .146, .026,
+                  center=(side * .509, 0, 0))
+        m.profile("TurretEnamel", [(-.177, -.236), (.278, -.096), (.358, .208), (.278, .374),
+                                   (.021, .396), (-.210, .167)], .091, .021,
+                  center=(side * .566, .040, 0))
+        m.tube("Black", (side * .582, .014, 0), (side * .624, .014, 0), .224, .202, sides=16)
+        m.tube("ScuffedEdge", (side * .623, .014, 0), (side * .641, .014, 0), .175, .167, sides=18)
+        m.tube("TurretCast", (side * .642, .014, 0), (side * .669, .014, 0), .155, .138, sides=16)
+        m.tube("TurretEnamel", (side * .669, .014, 0), (side * .684, .014, 0), .058, .047, sides=10)
+        for z in (-.235, .12, .420):
+            rivet(m, (side * .585, -.152 if z < 0 else .241, z), (side, 0, 0), .024, "ScuffedEdge")
+        m.block("TurretCast", (side * .341, .344, .158), (.242, .177, .412), .038, axis=1)
+        m.block("Black", (side * .342, .435, .167), (.157, .018, .284), .006, axis=1)
+        for row in range(4):
+            m.block("TurretEnamel", (side * .342, .452, .066 + row * .065), (.153, .027, .019), .004, axis=1)
+
+        # Side cassettes carry rangefinder elements and inset louvers.
+        cx = side * .724
+        m.block("TurretCast", (cx, .096, .283), (.285, .420, .352), .035, axis=2)
+        m.block("TurretEnamel", (cx, .109, .216), (.249, .367, .300), .025, axis=2)
+        m.block("Black", (cx, .106, .061), (.219, .313, .026), .012, axis=2)
+        if side < 0:
+            for i in range(3):
+                for j in range(2):
+                    x, y = cx + (j - .5) * .096, .101 + (i - 1) * .090
+                    m.tube("TurretCast", (x, y, .055), (x, y, .032), .039, .036, sides=9)
+                    m.tube("Black", (x, y, .033), (x, y, .029), .025, .021, sides=9)
+        else:
+            for i in range(5):
+                m.block("TurretCast", (cx, -.011 + i * .057, .042), (.174, .024, .025), .004, angle=.08, axis=2)
+            m.block("TurretScanLamp", (cx, .251, .038), (.080, .011, .008), .002, axis=2)
+        m.block("TurretScanLamp", (side * .871, .227, .207), (.009, .025, .042), .004)
+        m.block("Black", (side * .862, .101, .283), (.029, .257, .131), .008)
+        for z in (.205, .335):
+            rivet(m, (side * .881, .042, z), (side, 0, 0), .016, "ScuffedEdge")
+
+    # Faceted sensor with a cyan lens and a separate small red status light.
+    m.block("TurretCast", (0, .219, -.452), (.365, .255, .182), .029, axis=2)
+    m.block("Black", (0, .219, -.550), (.300, .192, .034), .019, axis=2)
+    m.tube("ScuffedEdge", (0, .232, -.568), (0, .232, -.592), .080, .075, sides=12)
+    m.ellipsoid("TurretScanLamp", (0, .232, -.589), (.062, .052, .024), sides=16, rows=6)
+    m.block("SignalLamp", (.109, .175, -.578), (.031, .020, .009), .004, axis=2)
+    m.block("Black", (0, -.264, .487), (.289, .107, .168), .019, axis=1)
+    m.profile("TurretEnamel", [(.239, .157), (.316, .146), (.443, .211),
+                               (.444, .356), (.288, .396), (.239, .346)], .207, .019)
+    m.profile("TurretCast", [(.410, .169), (.557, .187), (.566, .358), (.484, .408), (.411, .384)], .282, .021)
+    m.block("TurretEnamel", (0, .559, .273), (.303, .058, .240), .019, axis=1)
+    m.block("TurretScanLamp", (0, .589, .214), (.132, .008, .023), .002, axis=1)
     return m
 
 
 def turret_emitters():
-    m = Model("turret_emitters", 2.5)
-    m.block("ColdReceiver", (0, -.078, -.350), (.446, .203, .311), .031, axis=1)
+    m = Model("turret_emitters", 2.8)
+    m.block("TurretCast", (0, -.101, -.282), (.659, .123, .211), .028, axis=1)
     for side in (-1, 1):
-        x = side * .22
-        m.profile("Cowl", [(-.104, -.303), (.088, -.228), (.152, -.341), (.113, -.602),
-                            (-.056, -.690), (-.113, -.534)], .232, .021, center=(x, 0, 0))
-        m.tube("ColdReceiver", (x, .023, -.534), (x, .023, -.716), .117, .112, 14)
-        m.tube("ScuffedEdge", (x, .023, -.707), (x, .023, -.767), .114, .084, 14)
-        m.tube("BarrelSteel", (x, .023, -.752), (x, .023, -1.092), .052, .049, 12)
-        m.tube("BarrelSteel", (x, .023, -.965), (x, .023, -1.207), .076, .081, 12)
-        m.tube("BarrelSteel", (x, .023, -1.193), (x, .023, -1.234), .090, .072, 12)
-        m.tube("Black", (x, .023, -1.230), (x, .023, -1.237), .045, .040, 12)
-        m.block("Black", (x + side * .117, .047, -.463), (.011, .064, .154), .007)
-        for z in (-.514, -.469, -.419):
-            m.block("ScuffedEdge", (x + side * .122, .047, z), (.008, .050, .012), .003, angle=.20)
+        x, y = side * .410, .014
+        m.profile("TurretEnamel", [(-.135, .124), (.083, .146), (.158, -.196), (.129, -.590),
+                                   (.056, -.690), (-.096, -.478), (-.148, -.148)], .255, .025,
+                  center=(x, 0, 0))
+        m.block("TurretCast", (x, .123, -.420), (.184, .119, .395), .022, axis=1)
+        m.block("Black", (x + side * .127, .081, -.211), (.019, .084, .146), .009)
+        m.block("ScuffedEdge", (x + side * .140, .077, -.223), (.010, .040, .086), .005)
+        for z in (-.045, -.536):
+            rivet(m, (x + side * .134, .093, z), (side, 0, 0), .019, "ScuffedEdge")
+        m.tube("TurretCast", (x, y, -.552), (x, y, -.754), .144, .132, sides=16)
+        m.tube("ScuffedEdge", (x, y, -.733), (x, y, -.773), .135, .127, sides=16)
+        m.tube("BarrelSteel", (x, y, -.755), (x, y, -1.328), .081, .065, sides=14)
+        m.tube("TurretCast", (x, y, -1.152), (x, y, -1.204), .098, .101, sides=14)
+        m.tube("BarrelSteel", (x, y, -1.203), (x, y, -1.550), .097, .096, sides=16)
+        for ring in range(5):
+            angle = 2 * pi * ring / 5
+            for z in (-1.265, -1.377, -1.482):
+                offset = (.094 * cos(angle), .094 * sin(angle), z)
+                m.block("Black", add((x, y, 0), offset), (.029, .009, .063), .002, angle=angle - pi / 2, axis=2)
+        # An inset dark face leaves a visible recess inside the chamfered outer rim.
+        rim = [(1.544, .095), (1.574, .105), (1.612, .080), (1.613, .050),
+               (1.587, .043), (1.556, .042)]
+        for (a, ra), (b, rb) in zip(rim, rim[1:]):
+            ring_a = [(x + ra * cos(i * pi / 9), y + ra * sin(i * pi / 9), -a) for i in range(18)]
+            ring_b = [(x + rb * cos(i * pi / 9), y + rb * sin(i * pi / 9), -b) for i in range(18)]
+            for i in range(18):
+                j = (i + 1) % 18
+                face = [ring_a[i], ring_a[j], ring_b[j], ring_b[i]]
+                center = mean(face)
+                radial = (center[0] - x, center[1] - y, 0)
+                facing = add(radial, (0, 0, -.17)) if b > a else mul(radial, -1)
+                m.face("BarrelSteel" if b > a else "Black", face, facing)
+        m.tube("Black", (x, y, -1.536), (x, y, -1.555), .042, .042, sides=14)
+        m.block("TurretEnamel", (x, .112, -1.003), (.105, .072, .353), .012, axis=1)
+        m.block("Black", (x, .154, -1.009), (.075, .025, .303), .006, axis=1)
+        m.block("TurretCast", (x, .117, -1.416), (.108, .081, .060), .016, axis=2)
+    return m
+
+
+def turret_cartridge():
+    m = Model("turret_cartridge", 3.0)
+    m.block("TurretEnamel", (0, .008, .049), (.392, .316, .318), .027, axis=2)
+    m.block("TurretCast", (0, .147, .047), (.408, .075, .330), .019, axis=1)
+    m.block("Black", (0, .072, .211), (.148, .038, .019), .008, axis=2)
+    m.block("Hazard", (0, -.042, .215), (.130, .065, .008), .007, axis=2)
+    for x in (-.133, .133):
+        m.block("ScuffedEdge", (x, .014, .212), (.032, .139, .014), .004, axis=2)
     return m
 
 
 def turret_wreck():
-    m = Model("turret_wreck", 1.6)
-    m.block("Graphite", (0, .208, 0), (.717, .361, .678), .059, angle=.19, axis=2)
-    m.block("Alloy", (-.337, .223, .077), (.241, .195, .394), .031, angle=-.27, axis=1)
-    m.block("Hazard", (.248, .319, -.131), (.374, .104, .337), .022, angle=-.52, axis=0)
+    m = Model("turret_wreck", 2.05)
+    m.tube("TurretCast", (0, .403, 0), (0, .519, 0), .465, .456, sides=15)
+    m.profile("TurretEnamel", [(.371, -.366), (.582, -.396), (.745, -.271),
+                                (.769, .235), (.613, .462), (.445, .341)], .822, .050)
+    m.block("TurretCast", (-.374, .571, -.174), (.290, .214, .345), .033, angle=-.41, axis=1)
+    m.block("Hazard", (.225, .619, .270), (.348, .119, .353), .017, angle=-.23, axis=0)
     for side in (-1, 1):
-        m.tube("Steel", (side * .150, .25, -.225), (side * .412, .161, -.487), .049, .029, 7)
+        start = (side * .218, .60, -.234)
+        m.tube("CharredTurret", start, (side * .438, .427, -.625), .108, .079, sides=10)
+        m.tube("Black", (side * .438, .427, -.617), (side * .449, .417, -.644), .065, .064, sides=9)
     return m
+
+
+def cuticle_loft(model, sections, *, sides=10, up=(0, 1, 0), axis=None,
+                  uv_span=(0.0, 1.0), lip=False, crest=0.0):
+    """Sweep a fitted section along an anatomical curve, with its UVs following the growth rings."""
+    rings = []
+    for index, (center, width, height) in enumerate(sections):
+        if axis is None:
+            before = sections[max(0, index - 1)][0]
+            after = sections[min(len(sections) - 1, index + 1)][0]
+            along = norm(sub(after, before))
+        else:
+            along = axis
+        across = norm(cross(up, along))
+        crown = cross(along, across)
+        row = []
+        for spoke in range(sides):
+            angle = 2 * pi * spoke / sides
+            x, y = sin(angle), cos(angle)
+            if lip:
+                x *= 1.11 - 0.11 * abs(y)
+                y *= 1.0 if y >= 0 else 0.55
+            y += crest * max(0, y) ** 8
+            row.append(add(center, add(mul(across, width * x), mul(crown, height * y))))
+        rings.append(row)
+
+    normals = []
+    for index, row in enumerate(rings):
+        before = rings[max(0, index - 1)]
+        after = rings[min(len(rings) - 1, index + 1)]
+        normals.append([
+            norm(cross(sub(after[spoke], before[spoke]), sub(row[(spoke + 1) % sides], row[spoke - 1])))
+            for spoke in range(sides)
+        ])
+    v0, v1 = uv_span
+    for index, (near, far) in enumerate(zip(rings, rings[1:])):
+        for spoke in range(sides):
+            following = (spoke + 1) % sides
+            corners = ((index, spoke), (index, following), (index + 1, following), (index + 1, spoke))
+            points = [near[spoke], near[following], far[following], far[spoke]]
+            face_normals = [normals[row][column] for row, column in corners]
+            if dot(mean(face_normals), sub(mean(points), mix(sections[index][0], sections[index + 1][0], .5))) < 0:
+                face_normals = [mul(normal, -1) for normal in face_normals]
+            u0, u1 = spoke / sides, (spoke + 1) / sides
+            va = v0 + (v1 - v0) * index / (len(rings) - 1)
+            vb = v0 + (v1 - v0) * (index + 1) / (len(rings) - 1)
+            model.face("DuneChitin", points, mean(face_normals), face_normals, [(u0, va), (u1, va), (u1, vb), (u0, vb)])
+    for index, neighbor in ((0, 1), (-1, -2)):
+        face_direction = sub(sections[index][0], sections[neighbor][0])
+        cap_uv = [(.54 + sin(2 * pi * spoke / sides) * .045, .53 + cos(2 * pi * spoke / sides) * .045)
+                  for spoke in range(sides)]
+        model.face("DuneChitin", rings[index], face_direction, uv=cap_uv)
 
 
 def beetle():
-    m = Model("dune_beetle", 2.0)
-    m.ellipsoid("Membrane", (0, .562, .041), (.340, .268, .704), 16, 7)
-    m.ellipsoid("Shell", (0, .669, -.240), (.420, .273, .430), 16, 7, 55, .053)
-    m.ellipsoid("Shell", (0, .557, .428), (.329, .223, .327), 14, 6, 61, .036)
-    for i in range(4):
-        z = -.35 + i * .226
-        y = .748 - i * .016
-        for side in (-1, 1):
-            width = .28 - abs(i - 1) * .034
-            m.ellipsoid("Shell" if i % 2 else "Ridge", (side * .144, y, z), (width, .167, .261),
-                        11, 5, seed=120 + i * 19 + side, variation=.06)
-            m.tube("Ridge", (side * .209, y + .138, z + .054),
-                   (side * (.382 - i * .028), y + .072, z + .218), .043, .011, 7, section=(1, .62))
+    model = Model("dune_beetle", 1.9)
+    # Angular bonnet with a hooked prow and a thick, everted rear edge.
+    cuticle_loft(model, [
+        ((0, .537, -1.035), .063, .030), ((0, .568, -.924), .188, .091),
+        ((0, .614, -.736), .277, .131), ((0, .675, -.439), .348, .188),
+        ((0, .727, -.142), .451, .238), ((0, .743, .182), .495, .267),
+        ((0, .722, .421), .462, .231), ((0, .680, .615), .348, .178),
+        ((0, .657, .734), .186, .092),
+    ], sides=20, axis=(0, 0, 1), lip=True, crest=.12, uv_span=(.02, .98))
+    model.ellipsoid("DuneSinew", (0, .520, -.057), (.352, .197, .625), sides=14, rows=6)
+    model.ellipsoid("DuneSinew", (0, .430, -.735), (.192, .099, .244), sides=12, rows=5)
     for side in (-1, 1):
-        # Swept mineral fins are widest at the shoulders and lie against the spine.
-        fin = [(side * .228, .780, -.411), (side * .185, .981, -.207),
-               (side * .133, 1.045, .316), (side * .211, .818, .422)]
-        ridge = (side * .289, .920, .161)
-        root = (side * .128, .788, .036)
-        for index in range(len(fin)):
-            edge_a, edge_b = fin[index], fin[(index + 1) % len(fin)]
-            m.face("Horn" if index == 1 else "Ridge", [edge_a, edge_b, ridge], (side, .4, 0))
-            m.face("Shell", [edge_a, edge_b, root], (-side, .2, 0))
-        m.tube("Shell", (side * .258, .866, -.190), ridge, .033, .012, 7, section=(1, .66))
-        m.tube("Membrane", (side * .248, .602, -.284), (side * .329, .473, -.481), .103, .099, 8)
-        m.tube("Membrane", (side * .245, .561, .286), (side * .313, .453, .413), .112, .095, 8)
-    tail = [(0, .520, .567), (0, .467, .725), (0, .400, .899), (0, .428, 1.075), (0, .497, 1.167)]
-    for i, (start, end) in enumerate(zip(tail, tail[1:])):
-        m.tube("Shell" if i % 2 else "Ridge", start, end, .169 - i * .033, .144 - i * .044, 8)
-    m.tube("Horn", tail[-1], (.103, .537, 1.235), .042, .004, 7)
-    m.tube("Horn", tail[-1], (-.089, .530, 1.212), .039, .004, 7)
-    m.ellipsoid("Membrane", (0, .477, -.743), (.251, .114, .334), 14, 6)
-    m.ellipsoid("Ridge", (0, .614, -.758), (.278, .161, .310), 14, 7, 65, .032)
-    m.ellipsoid("Shell", (0, .540, -1.014), (.185, .079, .166), 12, 6)
-    m.ellipsoid("Horn", (0, .443, -.984), (.166, .051, .144), 10, 5)
-    for side in (-1, 1):
-        m.tube("Horn", (side * .207, .609, -.683), (side * .105, .565, -1.046), .075, .027, 8, section=(1, .63))
-        m.ellipsoid("Horn", (side * .203, .558, -.936), (.067, .035, .059), 10, 5)
-        m.ellipsoid("Eye", (side * .244, .556, -.951), (.028, .016, .035), 9, 4)
-        m.ellipsoid("Eye", (side * .255, .562, -.856), (.021, .011, .022), 8, 4)
+        # Serrated shoulder shield, behind the single continuous forehead plate.
+        cuticle_loft(model, [
+            ((side * .271, .545, -.343), .066, .043),
+            ((side * .422, .615, -.083), .104, .085),
+            ((side * .486, .667, .205), .084, .120),
+            ((side * .393, .694, .478), .080, .101),
+            ((side * .360, .758 + side * .018, .634), .031, .040),
+            ((side * .399, .779 + side * .031, .735), .003, .005),
+        ], sides=8, uv_span=(.11, .86), lip=True)
         for index in range(3):
-            z = -.854 - .065 * index
-            m.tube("Horn", (side * (.165 - .021 * index), .485, z),
-                   (side * (.137 - .019 * index), .426, z - .033), .026, .006, 6)
-        m.tube("Horn", (side * .186, .460, -1.003), (side * .166, .427, -1.190), .045, .009, 8, section=(1, .65))
+            z = -.29 + index * .175
+            cuticle_loft(model, [
+                ((side * .175, .412, z - .054), .040, .025),
+                ((side * (.338 + index * .016), .487, z), .077, .044),
+                ((side * (.397 + index * .011), .585, z + .068), .033, .031),
+            ], sides=7, uv_span=(.39, .58))
+        # Optical slit behind the distinct three-prong mouth cage.
+        a = (side * .167, .555, -.897)
+        b = (side * .229, .569, -.774)
+        model.tube("DuneEyeLamp", a, b, .018, .024, 8, section=(.66, 1.0))
+        for inset in (0.0, .057):
+            cuticle_loft(model, [
+                ((side * (.237 - inset), .513, -.712), .061, .062),
+                ((side * (.218 - inset), .443, -.846), .049, .053),
+                ((side * (.155 - inset * .70), .384, -.988), .039, .026),
+                ((side * (.091 - inset * .42), .426, -1.072 + inset), .003, .004),
+            ], sides=8, uv_span=(.28, .85))
+    cuticle_loft(model, [
+        ((0, .436, -.832), .052, .046), ((0, .363, -.961), .042, .026),
+        ((0, .381, -1.068), .002, .003),
+    ], sides=8, uv_span=(.32, .80))
+    return model
+
+
+def beetle_leg(side, foreclaw=False):
+    suffix = "left" if side < 0 else "right"
+    part = "claw" if foreclaw else "leg"
+    model = Model(f"beetle_{part}_{suffix}", 2.1)
+    if foreclaw:
+        arm = [(0, .014, 0), (.207, -.048, -.089), (.365, .035, -.161), (.459, .165, -.258)]
+        edge = [(.406, .093, -.209), (.489, .162, -.291), (.561, .062, -.424),
+                (.628, -.152, -.521), (.693, -.390, -.607), (.678, -.544, -.668)]
+    else:
+        arm = [(0, .008, 0), (.189, -.099, .029), (.360, -.040, .069), (.536, .151, .134)]
+        edge = [(.481, .095, .106), (.562, .172, .143), (.658, .119, .115),
+                (.741, -.107, .052), (.810, -.353, -.025), (.779, -.574, -.141)]
+    def mirrored(point):
+        return (side * point[0], point[1], point[2])
+
+    thigh = list(zip(map(mirrored, arm), (.077, .103, .082, .054), (.086, .100, .071, .055)))
+    tibia = list(zip(map(mirrored, edge), (.055, .092, .088, .070, .041, .003), (.064, .093, .106, .069, .046, .003)))
+    cuticle_loft(model, thigh, up=(0, 0, 1), uv_span=(.14, .57))
+    cuticle_loft(model, tibia, up=(0, 0, 1), uv_span=(.16, .92), lip=True)
+    # The outer spur breaks the long blade's silhouette without adding another moving part.
+    root = edge[2]
+    cuticle_loft(model, [
+        (mirrored(root), .047, .055),
+        (mirrored(add(root, (.044, .100, -.038))), .035, .029),
+        (mirrored(add(root, (.117, .181, -.060))), .002, .003),
+    ], sides=7, up=(0, 0, 1), uv_span=(.37, .78))
+    return model
+
+
+def beetle_tail(upper=False):
+    model = Model("beetle_sting" if upper else "beetle_tail", 2.2)
+    if upper:
+        path = [(0, 0, 0), (0, .179, .028), (-.016, .347, -.010),
+                (-.033, .492, -.104), (-.055, .565, -.247), (-.061, .556, -.365)]
+        widths = [.109, .105, .094, .079, .069, .042]
+    else:
+        path = [(0, 0, 0), (.004, -.010, .190), (0, .107, .342),
+                (0, .287, .465), (0, .48, .51)]
+        widths = [.155, .155, .146, .128, .114]
+    spine = [(center, radius * .74, radius * .61) for center, radius in zip(path, widths)]
+    cuticle_loft(model, spine, up=(1, 0, 0), sides=8, uv_span=(.53, .85))
+    for index, (base, tip) in enumerate(zip(path, path[1:])):
+        width = widths[index]
+        cuticle_loft(model, [
+            (mix(base, tip, -.09), width * .70, width * .78),
+            (mix(base, tip, .27), width * .93, width * 1.08),
+            (mix(base, tip, .67), width * .86, width * 1.00),
+            (mix(base, tip, .88), width * .84, width * .96),
+            (mix(base, tip, .96), width * .71, width * .79),
+        ], up=(1, 0, 0), sides=10, uv_span=(.20 + index * .085, .34 + index * .085), lip=True)
+        if index in (1, 2):
+            sign = -1 if index == 1 else 1
+            flank = add(mix(base, tip, .78), (sign * width * .85, .012, width * .20))
+            cuticle_loft(model, [
+                (flank, .022, .029),
+                (add(flank, (sign * .022, .024, .039)), .020, .019),
+                (add(flank, (sign * .043, .067, .064)), .002, .003),
+            ], up=(1, 0, 0), sides=7, uv_span=(.37, .86))
+    if upper:
+        # Paired blades arch over separate recessed luminous sacs.
+        for side in (-1, 1):
+            reach = -.618 if side < 0 else -.553
+            cuticle_loft(model, [
+                ((side * .014 - .049, .526, -.218), .077, .043),
+                ((side * .103 - .055, .569, -.374), .077, .047),
+                ((side * .130 - .060, .542, -.476), .045, .032),
+                ((side * .165 - .060, .494, reach), .002, .003),
+            ], sides=10, uv_span=(.48, .96))
+            model.ellipsoid("DuneSporeLamp", (side * .057 - .056, .503, -.376),
+                            (.047, .035, .092 if side > 0 else .109), sides=10, rows=6)
+        cuticle_loft(model, [
+            ((-.057, .562, -.256), .088, .042), ((-.057, .577, -.405), .061, .032),
+            ((-.073, .537, -.534), .006, .005),
+        ], sides=8, uv_span=(.54, .90))
+    return model
+
+
+def canyon_formation(family):
+    name = ("canyon_ridge", "canyon_spur", "canyon_cut")[family]
+    m = Model(name, .24)
+    rng = Random(4171 + family * 271)
+    count = 32
+    perimeter = []
+    for index in range(count):
+        angle = index * 2 * pi / count
+        rib = 1.0 + .12 * sin(angle * 5 + family) + .076 * sin(angle * 11 - family * 2)
+        x = cos(angle) * rib
+        z = sin(angle) * (rib + .07 * cos(angle * 9))
+        perimeter.append((x, z, rng.uniform(-.12, .12)))
+
+    bands = (
+        (-.025, 1.11), (.066, 1.03), (.15, .97), (.22, .87), (.25, .81),
+        (.294, .92), (.359, .90), (.414, .78), (.437, .73), (.493, .80),
+        (.562, .76), (.61, .64), (.632, .60), (.665, .68), (.736, .63),
+        (.781, .56), (.80, .52), (.845, .53), (.911, .48), (.96, .41),
+        (1.0, .36),
+    )
+    top = (10.0, 12.7, 8.75)[family]
+    width = (7.0, 6.6, 7.1)[family]
+    depth = (3.63, 3.28, 3.84)[family]
+    rows = []
+    for index, (height, size) in enumerate(bands):
+        ring = []
+        for spoke, (x, z, notch) in enumerate(perimeter):
+            angle = spoke * 2 * pi / count
+            tilt = (.14 * x + .07 * z if family == 0 else (-.20 * x + .06 * z if family == 1 else .11 * cos(angle * 2.0)))
+            erosion = sin(angle * 5 + family * 3) * .43 + sin(angle * 13 + 1.5) * .31
+            # Beds dip across the ridge and break into narrower vertical gullies near the crown.
+            y = top * (height + tilt * max(0, height) ** 1.53) + (erosion + notch) * min(1.0, max(0, height * 9))
+            y += rng.uniform(-.09, .09) if index > 0 else -.21
+            if index > 0:
+                y = max(y, rows[-1][spoke][1] + .053)
+            shift = (-.8 if family == 1 else .65) * height + sin(height * 9 + family) * height * .78
+            xx = x * width * size + shift + notch * .92
+            zz = z * (depth * size) + cos(height * 8 + family) * .69 * height
+            zz += .18 * sin(angle * 17 + index * .81) * min(1.0, max(0, height * 12))
+            ring.append((xx, y, zz))
+        rows.append(ring)
+    circumference = [0.0]
+    for index in range(count):
+        a, b = rows[0][index], rows[0][(index + 1) % count]
+        circumference.append(circumference[-1] + sqrt((a[0] - b[0]) ** 2 + (a[2] - b[2]) ** 2))
+    for band, (base, roof) in enumerate(zip(rows, rows[1:])):
+        for index in range(count):
+            following = (index + 1) % count
+            a, b, c, d = base[index], base[following], roof[following], roof[index]
+            finish = "CanyonShade" if band in (4, 8, 12, 15) and rng.random() < .65 else "CanyonLedge"
+            ua, ub = circumference[index] * .23, circumference[index + 1] * .23
+            m.face(finish, [a, c, b], cross(sub(c, a), sub(b, a)),
+                   uv=[(ua, -a[1] * .29), (ub, -c[1] * .29), (ub, -b[1] * .29)])
+            m.face(finish, [a, d, c], cross(sub(d, a), sub(c, a)),
+                   uv=[(ua, -a[1] * .29), (ua, -d[1] * .29), (ub, -c[1] * .29)])
+    crown = rows[-1]
+    crest = add(mean(crown), (.16, .58 if family == 1 else .35, -.22))
+    for index in range(count):
+        a, b = crown[index], crown[(index + 1) % count]
+        m.face("CanyonLedge", [a, crest, b], cross(sub(crest, a), sub(b, a)))
     return m
 
 
-def beetle_leg(side):
-    m = Model("beetle_leg_left" if side < 0 else "beetle_leg_right", 2.1)
-    knee = (side * .327, .112, .070)
-    hock = (side * .405, -.211, .112)
-    foot = (side * .446, -.472, -.018)
-    m.tube("Membrane", (0, .015, 0), knee, .128, .117, 8, section=(1, .71))
-    m.tube("Ridge", (side * .064, .068, .012), (side * .30, .145, .076), .112, .087, 8, section=(1, .73))
-    m.ellipsoid("Shell", knee, (.107, .106, .116), 10, 5)
-    m.tube("Membrane", knee, hock, .101, .066, 8)
-    m.tube("Shell", (side * .350, .063, .124), (side * .423, -.330, .073), .084, .046, 8)
-    m.tube("Membrane", hock, foot, .064, .058, 8)
-    for x in (-.039, .043):
-        m.tube("Horn", (foot[0] + x, -.437, -.020), (foot[0] + x * 1.23, -.499, -.207), .044, .006, 7, section=(1, .70))
+def approach_bastion():
+    m = Model("canyon_bastion", .47)
+    m.profile("BunkerConcrete", [(.02, -.15), (8.46, -1.12), (8.69, -1.32),
+                                  (8.20, -4.14), (.02, -4.69)], 5.21, .146)
+    m.profile("BunkerArmor", [(.12, .02), (2.32, .12), (7.32, -.39),
+                               (8.06, -.57), (8.28, -.91), (.10, -1.32)], 4.10, .097)
+    m.block("BunkerRim", (0, 8.43, -2.15), (5.32, .35, 4.14), .115, axis=1)
+    m.block("BunkerArmor", (0, 8.71, -2.05), (4.72, .33, 3.34), .083, axis=1)
+    for x in (-1.78, 1.78):
+        m.profile("BunkerRim", [(.21, .35), (1.04, .35), (7.75, -.36),
+                                 (8.16, -.81), (7.41, -1.11), (.49, -.61)],
+                  .52, .078, center=(x, 0, 0))
+        m.block("Black", (x * .83, 3.21, .027), (.427, 3.44, .10), .028, axis=2)
+        for y in (2.00, 3.11, 4.22, 5.32):
+            m.block("BunkerArmor", (x * .83, y, .094), (.36, .29, .094), .039, axis=2)
+    m.block("Black", (0, 7.53, -.259), (2.83, .386, .156), .023, axis=2)
+    for x in (-.96, -.48, 0, .48, .96):
+        m.block("AmberLamp", (x, 7.54, -.169), (.346, .033, .049), .006)
+    for x in (-1.48, 1.58):
+        m.tube("Graphite", (x, 8.74, -2.26), (x, 9.21, -2.26), .085, .061, sides=8)
     return m
 
 
-def beetle_claw(side):
-    m = Model("beetle_claw_left" if side < 0 else "beetle_claw_right", 2.4)
-    joint = (side * .237, .209, -.128)
-    wrist = (side * .320, .242, -.404)
-    m.tube("Membrane", (0, 0, 0), joint, .098, .085, 8)
-    m.tube("Shell", joint, wrist, .089, .080, 8, section=(1, .69))
-    m.ellipsoid("Ridge", wrist, (.100, .067, .105), 10, 5)
-    for shift in (-.036, .046):
-        knuckle = (wrist[0] + shift, .237, -.424)
-        bend = (wrist[0] + shift * .53, .168, -.563)
-        tip = (wrist[0] - shift * .16, .036, -.658)
-        m.tube("Horn", knuckle, bend, .045, .033, 7, section=(1, .58))
-        m.tube("Horn", bend, tip, .034, .004, 7, section=(1, .58))
-    return m
+def command_superstructure(model):
+    m = model
+    m.profile("BunkerConcrete", [(3.87, -1.95), (6.25, -1.75), (7.27, -1.07),
+                                  (6.26, 1.77), (4.12, 1.97)], 3.29, .126)
+    m.profile("BunkerRim", [(6.10, -1.71), (7.26, -1.94), (7.94, -1.63),
+                             (7.93, 1.52), (7.49, 1.91), (6.86, 1.67)], 4.85, .15)
+    m.profile("BunkerArmor", [(7.36, -1.57), (7.98, -1.72), (8.18, -1.45),
+                               (8.18, 1.30), (7.92, 1.61), (7.39, 1.42)], 4.32, .085)
+    m.block("Black", (0, 7.73, 1.66), (3.68, .49, .113), .026, axis=2)
+    for x in (-1.47, -.735, 0.0, .735, 1.47):
+        m.block("BunkerRim", (x, 7.74, 1.726), (.029, .476, .031), .006)
+        m.block("AmberLamp", (x - .26, 7.73, 1.736), (.292, .039, .013), .004)
+    for side in (-1, 1):
+        m.profile("BunkerArmor", [(4.04, 1.43), (6.87, 1.30), (7.19, .97),
+                                   (6.69, .52), (4.36, .73)], .372, .059,
+                  center=(side * 1.66, 0, 0))
+        m.block("BunkerArmor", (side * 2.19, 7.64, -.27), (.134, .38, 2.74), .025)
+    m.block("BunkerArmor", (0, 8.17, -.02), (4.12, .198, 3.13), .071, axis=1)
+    m.block("BunkerRim", (-.62, 8.51, -.39), (2.02, .54, 1.73), .089, axis=1)
+    m.tube("BunkerArmor", (.58, 8.25, -.47), (.58, 9.02, -.47), .64, .59, sides=16)
+    m.tube("BunkerRim", (.58, 8.99, -.47), (.58, 9.07, -.47), .593, .521, sides=16)
+    for x, height in ((-1.25, 11.3), (-.79, 10.14), (1.53, 9.87)):
+        m.tube("BunkerRim", (x, 8.72, -.68), (x, height, -.68), .066, .022, sides=8)
+        m.ellipsoid("IceLamp", (x, height, -.68), (.037, .047, .037), sides=8, rows=4)
+    for y in (9.51, 10.35):
+        m.tube("BunkerRim", (-1.50, y, -.68), (-.91, y, -.68), .019, .016, sides=6)
 
 
 def wall():
-    m = Model("wall_segment", .62)
-    m.profile("Concrete", [(.065, -3.31), (2.77, -3.31), (3.056, -3.26), (3.164, .376),
+    m = Model("wall_segment", .48)
+    m.profile("BunkerConcrete", [(.065, -3.31), (2.77, -3.31), (3.056, -3.26), (3.164, .376),
                            (2.8, .389), (.062, .389)], 3.94, .078, axis=0)
-    m.block("Alloy", (0, 3.057, -1.459), (3.99, .244, 3.704), .040, axis=1)
+    m.block("BunkerArmor", (0, 3.057, -1.459), (3.99, .244, 3.704), .040, axis=1)
     for z in (-2.998, -2.302, -1.606, -.91, -.214):
         m.block("Graphite", (0, 3.178, z), (3.82, .004, .029), .0008, axis=1)
     for x in (-1.56, 1.56):
         m.block("Graphite", (x, 3.177, -2.985), (.317, .008, .175), .0015, axis=1)
         for offset in (-.105, -.04, .04, .105):
             m.block("Steel", (x + offset, 3.184, -2.985), (.026, .008, .150), .0015, axis=1)
-    m.profile("Concrete", [(.07, -.339), (.16, -.385), (2.24, -.385), (2.68, -.309),
+    m.profile("BunkerConcrete", [(.07, -.339), (.16, -.385), (2.24, -.385), (2.68, -.309),
                             (3.06, -.282), (3.12, .242), (2.71, .362), (.086, .367)],
               3.94, .059, axis=0)
     m.block("Graphite", (0, .145, 0), (3.955, .269, .938), .049, axis=1)
-    m.block("Alloy", (0, 3.064, 0), (3.956, .185, .869), .045, axis=1)
+    m.block("BunkerArmor", (0, 3.064, 0), (3.956, .185, .869), .045, axis=1)
     for side in (-1, 1):
         z = side * .386 if side > 0 else -3.315
         for x in (-1.20, 0, 1.20):
-            m.block("Concrete", (x, 1.421, z), (1.101, 2.21, .202), .075, axis=2)
+            m.block("BunkerConcrete", (x, 1.421, z), (1.101, 2.21, .202), .075, axis=2)
             m.block("Black", (x, 2.486, z + side * .079), (.897, .149, .064), .028, axis=2)
-            m.block("Alloy", (x, 2.507, z + side * .120), (.798, .063, .026), .013, axis=2)
+            m.block("BunkerArmor", (x, 2.507, z + side * .120), (.798, .063, .026), .013, axis=2)
         m.block("Graphite", (0, 2.897, z + side * .055), (3.89, .227, .203), .023, axis=2)
         for end in (-1, 1):
             x = end * 1.32
@@ -585,23 +947,37 @@ def wall():
         m.block("Hazard", (0, .398, z + side * .113), (3.42, .103, .023), .012, axis=2)
         for x in [-1.45 + .25 * index for index in range(12)]:
             m.block("Graphite", (x, .399, z + side * .129), (.074, .114, .012), .008, angle=-.53, axis=2)
+    for x in (-1.77, 1.77):
+        # Only the flanking ribs project past the panels used for visible wall damage.
+        m.profile("BunkerArmor", [(.030, .540), (.281, .790), (1.169, .732),
+                                   (2.672, .483), (2.937, .438), (.13, .375)],
+                  .355, .043, center=(x, 0, 0))
+        m.profile("BunkerRim", [(.304, .750), (.547, .753), (2.437, .563),
+                                 (2.698, .501), (2.426, .456), (.373, .660)],
+                  .153, .019, center=(x, 0, 0))
+    m.block("BunkerRim", (0, 2.907, .514), (3.72, .104, .117), .018, axis=2)
     return m
 
 
 def blocker():
     m = Model("gate_frame", .6)
     m.block("Graphite", (0, .027, 0), (3.98, .052, 1.145), .014, axis=1)
-    m.block("Alloy", (0, 3.331, 0), (3.991, .42, 1.013), .084, axis=1)
+    m.block("BunkerArmor", (0, 3.331, 0), (3.991, .42, 1.013), .084, axis=1)
     m.block("Black", (0, 3.423, .519), (2.053, .237, .036), .018, axis=2)
     m.block("Black", (0, 3.423, -.519), (2.053, .237, .036), .018, axis=2)
     for sign in (-1, 1):
         x = sign * 1.87
         m.block("Graphite", (x, 1.677, 0), (.238, 3.295, 1.054), .037)
-        m.block("Alloy", (x, .516, 0), (.244, .94, 1.078), .033)
+        m.block("BunkerArmor", (x, .516, 0), (.244, .94, 1.078), .033)
         m.block("Steel", (x, 2.806, 0), (.247, .188, 1.094), .024)
         for k in (-1, 1):
             m.block("Hazard", (x, 1.77, k * .541), (.202, .404, .036), .014, axis=2)
             rivet(m, (x, .351, k * .562), (0, 0, k), .045)
+    for side in (-1, 1):
+        m.profile("BunkerRim", [(.131, .272), (.361, .601), (2.938, .445),
+                                 (3.310, .388), (3.144, .222), (.225, .191)],
+                  .212, .046, center=(side * 1.90, 0, 0))
+    m.block("BunkerRim", (0, 3.49, .322), (3.63, .295, .365), .037, axis=2)
     return m
 
 
@@ -612,7 +988,7 @@ def gate_panels():
         m.block("Graphite", (x, 1.602, 0), (1.714, 3.121, .647), .086, axis=2)
         for depth in (-1, 1):
             side = depth * .350
-            m.profile("Alloy", [(x - .716, .324), (x + .71, .324), (x + .73, 2.537),
+            m.profile("BunkerArmor", [(x - .716, .324), (x + .71, .324), (x + .73, 2.537),
                                 (x + .59, 2.84), (x - .573, 2.828), (x - .74, 2.58)],
                       .118, .046, axis=2, center=(0, 0, side))
             m.block("Ceramic", (x, 2.264, depth * .424), (1.24, .74, .046), .082, axis=2)
@@ -627,40 +1003,36 @@ def gate_panels():
 
 def relay():
     m = Model("relay_bunker", .51)
-    m.profile("Concrete", [(-2.585, -2.213), (2.58, -2.214), (2.59, 1.83),
+    m.profile("BunkerConcrete", [(-2.585, -2.213), (2.58, -2.214), (2.59, 1.83),
                             (2.211, 2.223), (-2.231, 2.22), (-2.59, 1.864)],
               3.86, .114, axis=1, center=(0, 1.971, 0))
     m.block("Graphite", (0, .245, 0), (5.287, .326, 4.533), .083, axis=1)
-    m.block("Alloy", (0, 3.848, 0), (5.563, .325, 4.716), .128, axis=1)
+    m.block("BunkerArmor", (0, 3.848, 0), (5.563, .325, 4.716), .128, axis=1)
     m.block("Black", (0, 1.423, 2.237), (2.122, 2.36, .175), .092, axis=2)
     for x in (-.467, .467):
         m.profile("Graphite", [(x - .405, .289), (x + .401, .289), (x + .417, 2.096),
                                 (x + .258, 2.385), (x - .268, 2.396), (x - .418, 2.092)],
                   .159, .056, axis=2, center=(0, 0, 2.343))
-        m.block("Alloy", (x, 1.41, 2.438), (.601, 1.387, .066), .079, axis=2)
+        m.block("BunkerArmor", (x, 1.41, 2.438), (.601, 1.387, .066), .079, axis=2)
         m.block("Hazard", (x, .647, 2.491), (.63, .157, .045), .026, axis=2)
     m.block("Black", (0, 2.825, 2.269), (2.158, .336, .094), .046, axis=2)
     for side in (-1, 1):
         x = side * 1.801
         for edge in (-1, 1):
             m.block("Graphite", (x, 1.733, edge * 2.249), (1.07, 2.768, .18), .097, axis=2)
-            m.block("Alloy", (x, 2.009, edge * 2.354), (.858, 1.374, .065), .056, axis=2)
+            m.block("BunkerArmor", (x, 2.009, edge * 2.354), (.858, 1.374, .065), .056, axis=2)
             for n in range(6):
                 m.block("Black", (x, 1.534 + n * .175, edge * 2.400), (.674, .073, .035), .013, axis=2)
         m.block("IceLamp", (x, 3.007, 2.339), (.69, .050, .034), .011, axis=2)
         m.block("Graphite", (side * 2.568, 1.9, -.1), (.197, 2.517, 2.773), .056)
         for z in (-1.183, .871):
-            m.tube("Alloy", (side * 2.674, .352, z), (side * 2.674, 3.637, z), .066, .053, 10)
+            m.tube("BunkerArmor", (side * 2.674, .352, z), (side * 2.674, 3.637, z), .066, .053, 10)
             for y in (.52, 1.3, 2.9, 3.47):
                 m.tube("Steel", (side * 2.674, y, z), (side * 2.674, y + .078, z), .087, .081, 10)
     m.block("Graphite", (.837, 4.13, -.702), (1.08, .318, 1.375), .08, axis=1)
     for n in range(5):
         m.block("Steel", (.45 + n * .18, 4.326, -.701), (.066, .08, .99), .019)
-    m.tube("Alloy", (-1.1, 4.005, 0), (-1.1, 4.40, 0), .451, .269, 14)
-    m.tube("Graphite", (-1.1, 4.31, 0), (-1.1, 6.455, 0), .107, .050, 12)
-    for y in (4.78, 5.31, 5.71):
-        m.tube("Steel", (-1.1, y, 0), (-1.1, y + .075, 0), .116, .086, 12)
-    m.ellipsoid("IceLamp", (-1.1, 6.486, 0), (.103, .078, .103), 10, 5)
+    command_superstructure(m)
     return m
 
 
@@ -865,9 +1237,10 @@ def scrub():
 
 def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
-    models = (rifle(), rifle_magazine(), rifle_support(), repair_tool(), turret_base(), turret_head(), turret_emitters(), turret_wreck(),
-              beetle(), beetle_leg(-1), beetle_leg(1), beetle_claw(-1), beetle_claw(1), wall(), blocker(), gate_panels(), relay(), station(),
-              supply_rack(), drone(), breach(), watchtower(), screen_rock(), mesa(), scrub(), *(boulder(i) for i in range(1, 4)))
+    models = (rifle(), rifle_magazine(), rifle_hand(True), rifle_hand(False), repair_tool(), turret_base(), turret_head(), turret_emitters(), turret_cartridge(), turret_wreck(),
+              beetle(), beetle_leg(-1), beetle_leg(1), beetle_leg(-1, foreclaw=True), beetle_leg(1, foreclaw=True),
+              beetle_tail(), beetle_tail(upper=True), wall(), blocker(), gate_panels(), relay(), station(),
+              supply_rack(), drone(), breach(), watchtower(), screen_rock(), mesa(), scrub(), approach_bastion(), *(canyon_formation(i) for i in range(3)), *(boulder(i) for i in range(1, 4)))
     for model in models:
         model.write()
 

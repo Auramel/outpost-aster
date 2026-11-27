@@ -104,6 +104,8 @@ func _build_core() -> void:
 	ceiling = 4.1
 	_solid = AsterArt.collider(self, Vector3(CORE_HALF.x * 2.0, 4.0, CORE_HALF.z * 2.0), Vector3(0, 2, 0), AsterArt.SOLID, self)
 	AsterModels.attach(_body_visual, &"relay")
+	AsterArt.collider(self, Vector3(3.29, 2.52, 3.20), Vector3(0, 5.24, -0.045), AsterArt.SOLID, self)
+	AsterArt.collider(self, Vector3(4.68, 1.39, 3.38), Vector3(0, 7.44, -0.09), AsterArt.SOLID, self)
 	AsterArt.lettering(self, "01  /  УЗЕЛ СВЯЗИ", Vector3(0, 2.83, 2.33), 27, AsterArt.CYAN)
 	AsterArt.box(_damage_visual, Vector3(1.70, 0.12, 0.03), Vector3(0, 3.24, 2.295), AsterArt.RED, true)
 
@@ -156,7 +158,8 @@ func _refresh() -> void:
 	if hp <= 0.0:
 		warning = "РАЗРУШЕНО" if is_core else "ПРОЛОМ"
 	if is_core:
-		tag_y = 4.55
+		tag_y = 4.30
+		status_tag.position.z = 2.43
 	elif is_gate:
 		tag_y = 4.10
 		if gate_open:

@@ -1,6 +1,11 @@
 class_name AsterTurret
 extends Node3D
 
+const MUZZLE := Vector3(0.410, 0.014, -1.617)
+const CASE_PORT := Vector3(0.552, 0.077, -0.223)
+const OPERATING_TAG_Y := 1.94
+const LOW_AMMO_FRACTION := 0.18
+
 var title: String
 var hp: float
 var max_hp: float
@@ -46,7 +51,7 @@ func setup(game: Node, name_on_base: String, base_wall: AsterStructure, via_ramp
 	add_child(_complete)
 	add_child(_wreck)
 	_complete.add_child(_head)
-	_head.position.y = 0.75
+	_head.position.y = 0.79
 	_head.add_child(_elevation)
 	_head.rotation.y = atan2(-facing.x, -facing.z)
 	AsterModels.attach(self, &"turret_base")
@@ -55,11 +60,11 @@ func setup(game: Node, name_on_base: String, base_wall: AsterStructure, via_ramp
 	AsterModels.attach(_carriage, &"turret_emitters")
 	_kit.setup(_head, _carriage, _complete)
 	AsterModels.attach(_wreck, &"turret_wreck")
-	_indicator = AsterArt.box(_head, Vector3(0.22, 0.042, 0.028), Vector3(0, 0.153, 0.541), AsterArt.CYAN, true)
+	_indicator = AsterArt.box(_head, Vector3(0.132, 0.027, 0.014), Vector3(0.172, 0.179, 0.517), AsterArt.CYAN, true)
 	if is_instance_valid(wall):
 		wall.status_tag.position.x = -0.90
 	status_tag = AsterStatusTag.new()
-	status_tag.position.y = 1.69
+	status_tag.position.y = OPERATING_TAG_Y
 	add_child(status_tag)
 	status_tag.setup(title, true)
 	_refresh_tag()
@@ -68,7 +73,7 @@ func setup(game: Node, name_on_base: String, base_wall: AsterStructure, via_ramp
 		var level := tuning.upgrade_level(path)
 		if level > 0:
 			_on_upgrade(path, level)
-	AsterArt.collider(self, Vector3(1.45, 1.45, 1.45), Vector3(0, 0.64, 0), AsterArt.TARGET, self, true)
+	AsterArt.collider(self, Vector3(1.74, 1.55, 1.61), Vector3(0, 0.73, 0), AsterArt.TARGET, self, true)
 	_wreck.hide()
 
 func _on_upgrade(path: int, level: int) -> void:
@@ -85,7 +90,10 @@ func capacity() -> int:
 
 func needs_drone_ammo() -> bool:
 	var load := roundi(tuning.stat(AsterTurretTuning.Path.DRONE))
-	return load > 0 and not rebuilding and service == &"" and (not has_box or capacity() - rounds >= mini(capacity(), load))
+	if load <= 0 or rebuilding or service != &"":
+		return false
+	var limit := capacity()
+	return not has_box or limit - rounds >= load or rounds <= limit * LOW_AMMO_FRACTION
 
 func receive_drone_ammo(amount: int) -> int:
 	if rebuilding or service != &"" or amount <= 0:
@@ -101,7 +109,7 @@ func attack_position() -> Vector3:
 	return global_position + Vector3.UP * 0.58
 
 func service_position() -> Vector3:
-	return global_position - facing * 0.61 + Vector3.UP * 0.77
+	return global_position - facing * 0.75 + Vector3.UP * 0.77
 
 func ready_to_fire() -> bool:
 	return not rebuilding and has_box and rounds > 0 and service == &""
@@ -192,9 +200,9 @@ func _refresh_tag() -> void:
 	var warning := ""
 	if not ready_to_fire():
 		warning = "БЕЗ ПАТРОНОВ" if has_box and rounds == 0 and service == &"" else status()
-	elif rounds <= capacity() * 0.18:
+	elif rounds <= capacity() * LOW_AMMO_FRACTION:
 		warning = "МАЛО ПАТРОНОВ"
-	status_tag.position.y = 0.88 if rebuilding else 1.69
+	status_tag.position.y = 0.98 if rebuilding else OPERATING_TAG_Y
 	status_tag.set_values(hp / max_hp, float(rounds) / capacity(), warning)
 
 func tick(delta: float, enemies: Array) -> void:
@@ -224,7 +232,7 @@ func tick(delta: float, enemies: Array) -> void:
 		target = null
 		_search = 0.0
 		return
-	var flight_time := maxf(0.0, pivot.distance_to(current_hit) - 1.1) / AsterBallistics.TURRET_SPEED
+	var flight_time := maxf(0.0, pivot.distance_to(current_hit) + MUZZLE.z) / AsterBallistics.TURRET_SPEED
 	var intercept: Vector3 = current_hit + target.velocity * flight_time
 	var direction := (intercept - pivot).normalized()
 	var yaw := atan2(-direction.x, -direction.z)
@@ -233,7 +241,8 @@ func tick(delta: float, enemies: Array) -> void:
 	_elevation.rotation.x = move_toward(_elevation.rotation.x, pitch, _balance.turret_turn_speed * delta)
 	if _shot_timer > 0.0 or absf(angle_difference(_head.rotation.y, yaw)) > 0.16 or absf(_elevation.rotation.x - pitch) > 0.16:
 		return
-	var tip := _carriage.to_global(Vector3(0.22 if shots_fired % 2 == 0 else -0.22, 0.023, -1.245))
+	var side := 1.0 if shots_fired % 2 == 0 else -1.0
+	var tip := _carriage.to_global(Vector3(side * MUZZLE.x, MUZZLE.y, MUZZLE.z))
 	var hit := intercept
 	if not AsterArt.ray(get_world_3d(), pivot, current_hit, AsterArt.SOLID).is_empty() or not AsterArt.ray(get_world_3d(), tip, hit, AsterArt.SOLID).is_empty():
 		return
@@ -241,14 +250,13 @@ func tick(delta: float, enemies: Array) -> void:
 	var spread := 0.008 * steadiness
 	var aim := (hit - tip).normalized()
 	aim = (aim + _head.global_basis.x * randf_range(-spread, spread) + Vector3.UP * randf_range(-spread, spread)).normalized()
+	var port := _carriage.to_global(Vector3(side * CASE_PORT.x, CASE_PORT.y, CASE_PORT.z))
 	_shot_timer += 1.0 / tuning.stat(AsterTurretTuning.Path.RATE)
 	rounds -= 1
 	shots_fired += 1
 	_kick = minf(_kick + 0.13 * steadiness, 0.21)
 	_carriage.position.z = _kick
 	_carriage.rotation.x = _kick * 0.56
-	var side := -1.0 if shots_fired % 2 == 0 else 1.0
-	var port := _carriage.to_global(Vector3(side * 0.56, 0.02, -0.18))
 	_game.fire_round(tip, aim, detection + 3.0, tuning.stat(AsterTurretTuning.Path.DAMAGE), true, port, _carriage.global_basis.x * side)
 
 func _find_enemy(enemies: Array, pivot: Vector3) -> Node3D:

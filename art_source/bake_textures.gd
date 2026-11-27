@@ -6,10 +6,13 @@ const NORMAL_STRENGTH := [1.45, 2.65, 1.77, 1.16]
 const WORKSHOP_TILES := [&"parkerized", &"painted", &"polymer", &"armory"]
 const WORKSHOP_NORMAL := [1.18, 1.45, 1.20, 2.02]
 const WORKSHOP_ROUGHNESS := [0.50, 0.67, 0.72, 0.86]
+const CANYON_TILES := [&"gravel", &"sandstone", &"bunker", &"armor"]
+const CANYON_NORMAL := [1.43, 2.23, 1.74, 1.28]
+const CANYON_ROUGHNESS := [0.92, 0.89, 0.82, 0.68]
 
 func _initialize() -> void:
 	var arguments := OS.get_cmdline_user_args()
-	if arguments.size() == 2 and arguments[0] in ["--field-atlas", "--workshop-atlas"]:
+	if arguments.size() == 2 and arguments[0] in ["--field-atlas", "--workshop-atlas", "--canyon-atlas"]:
 		var textures := Image.load_from_file(arguments[1])
 		if textures == null or textures.is_empty():
 			printerr("Could not decode the texture atlas.")
@@ -17,6 +20,8 @@ func _initialize() -> void:
 			return
 		if arguments[0] == "--workshop-atlas":
 			_bake_atlas(textures, "", WORKSHOP_TILES, WORKSHOP_NORMAL, WORKSHOP_ROUGHNESS)
+		elif arguments[0] == "--canyon-atlas":
+			_bake_atlas(textures, "canyon_", CANYON_TILES, CANYON_NORMAL, CANYON_ROUGHNESS)
 		else:
 			_bake_atlas(textures, "field_")
 		quit()

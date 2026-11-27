@@ -1,8 +1,10 @@
 # Графика «Форпоста Астер»
 
+Панцирь пустынного жука, клинки лап и две подвижные части хвоста запекаются из `build_models.py`. Для цветовой карты и карты нормалей хитина запустите `python3 art_source/bake_chitin.py` из корня проекта.
+
 В игре используются оригинальные модели glTF из `assets/art/models` и материалы из `assets/art/materials`. Геометрия оружия, базы, турелей и жуков собрана специально для проекта. Импортированные меши используются как визуальные узлы над существующей физикой, а модель каждой турели разделена на основание, поворотный блок и наклоняемое оружие. В Godot включены упрощённые уровни детализации мешей. Для фактур используются карты нормалей, мип-уровни и VRAM-сжатие.
 
-Карабин собран из корпуса со сквозной верхней рукоятью, магазина и поддерживающей руки. Турель разделена на основание, поворотный кожух и подвижную пару стволов. У жука опорные лапы и хватательные конечности используют отдельные меши и движения. Карабин, турели и постройки используют общие карты потёртой стали и оливкового покрытия. На панцире жуков применяется фактура песка из окружения.
+Карабин собран из корпуса со сквозным прикладом и открытым прицелом, съёмного магазина и двух отдельных рук. Верхняя и нижняя части цевья разнесены и оставляют видимым кожух ствола. Для корпуса используются карты сатинированной стали и полимера, для меток и прицела применяется холодное свечение. У турели отдельные меши для кольцевой опоры, поворотной брони с сенсорами, двухствольной каретки, сменной кассеты и обломков. Корпус покрыт потёртой эмалью, а каретка откатывается при стрельбе. У жука отдельные меши для опорных лап, хватательных конечностей и двух частей хвоста.
 
 `python3 art_source/build_models.py` повторно собирает модели. Скрипт `art_source/bake_textures.gd` разделяет исходный атлас на четыре материала, подготавливает края для повторения, строит карты нормалей и приводит панораму к формату 2:1. Для повторного запекания передайте ему два исходных PNG:
 
@@ -12,6 +14,12 @@
 ```
 
 ## Промпты для встроенного ImageGen
+
+### Каньон и укрепления
+
+Команда `--canyon-atlas` у `bake_textures.gd` запекает четыре бесшовные фактуры с картами цвета, нормалей и шероховатости. Файлы `canyon_*` сохраняются в `assets/art/materials`. Средние скальные гряды имеют коллизию на базе видимой формы. Для дальнего хребта используются те же три модели в пакетах без физики. Поверхность долины и высоты появления жуков берутся из одной сетки рельефа.
+
+> Use case: photorealistic-natural. Asset type: square four-material albedo atlas for the original game Outpost Aster. Fill four exactly square full-bleed quadrants meeting at the exact image center, no separators. Top left: sun-bleached pale beige packed canyon grit, weathered sandy mineral ground, small embedded angular pebbles and subtle ripples, even light. Top right: close orthographic face of Mojave-style eroded sedimentary rock, ochre-tan and dust-gray layers with hairline horizontal seams and irregular narrow vertical runnels, tiny granular pores, low to medium contrast. Bottom left: mottled cool gray poured military concrete, dust-lightened aggregate with very faint vertical streaks, pores and restrained chips at the grain scale. Bottom right: weathered blue-gray painted structural steel, slight amber mineral dust in creases, subdued fine silvery abrasions, flaking dark paint in modest speckling. PBR diffuse samples viewed straight on under perfectly flat diffuse light, no objects, no panel or paving seams, no sky, no typography, no perspective, no borders, no baked cast shadows. Photographic detail with consistent scale and palette.
 
 ### Атлас материалов
 

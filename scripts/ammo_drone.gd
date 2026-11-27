@@ -40,7 +40,7 @@ func setup(turret: Node3D, supply: Node3D) -> void:
 	global_position = _dock()
 
 func _dock() -> Vector3:
-	return _turret.global_position - _turret.facing * 1.0 + Vector3(0.61, 1.62, 0)
+	return _turret.global_position + AsterTurretKit.DRONE_PAD + Vector3.UP * 0.24
 
 func _pickup() -> Vector3:
 	return _supply.global_position + Vector3(_pickup_offset, 1.81, -0.20)

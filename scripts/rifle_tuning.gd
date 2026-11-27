@@ -5,8 +5,8 @@ enum Path { RATE, DAMAGE, ACCURACY, RECOIL }
 
 const MAX_LEVEL := 5
 const BASE_PRICES := [57, 67, 51, 54]
-const ARMOUR := Color("#64716a")
-const STEEL := Color("#a6aaa2")
+const ARMOUR := Color("#536477")
+const STEEL := Color("#a3aeb8")
 const GRAPHITE := Color("#323c46")
 
 var _levels: Array[int] = [0, 0, 0, 0]
@@ -16,30 +16,30 @@ var _balance: AsterBalance
 
 func setup(balance: AsterBalance, rifle: Node3D) -> void:
 	_balance = balance
-	var rate := _module(rifle, Vector3(0, 0.111, -0.42))
+	var rate := _module(rifle, Vector3(0, 0.065, -0.565))
 	for side in [-1.0, 1.0]:
-		_box(rate, Vector3(0.043, 0.082, 0.34), Vector3(side * 0.178, 0.022, 0), ARMOUR)
+		_box(rate, Vector3(0.032, 0.045, 0.30), Vector3(side * 0.130, 0.006, 0), ARMOUR)
 	for rank in range(MAX_LEVEL):
-		_rank_parts[Path.RATE].append(_box(rate, Vector3(0.020, 0.059, 0.034), Vector3(0.203, 0.024, -0.13 + rank * 0.063), STEEL))
+		_rank_parts[Path.RATE].append(_box(rate, Vector3(0.014, 0.032, 0.027), Vector3(-0.149, 0.010, -0.11 + rank * 0.052), STEEL))
 
-	var damage := _module(rifle, Vector3(0, 0.037, -0.722))
-	var crown := AsterArt.primitive(damage, "prism", Vector3(0.14, 0.13, 0.14), Vector3.ZERO, GRAPHITE)
+	var damage := _module(rifle, Vector3(0, 0.027, -0.945))
+	var crown := AsterArt.primitive(damage, "prism", Vector3(0.126, 0.099, 0.126), Vector3.ZERO, GRAPHITE)
 	crown.rotation.x = PI * 0.5
 	_viewmodel(crown)
 	for rank in range(MAX_LEVEL):
-		_rank_parts[Path.DAMAGE].append(_box(damage, Vector3(0.020, 0.018, 0.105), Vector3(-0.056 + rank * 0.028, 0.064, 0.01), STEEL))
+		_rank_parts[Path.DAMAGE].append(_box(damage, Vector3(0.017, 0.013, 0.055), Vector3(-0.045 + rank * 0.023, 0.048, -0.021), STEEL))
 
-	var accuracy := _module(rifle, Vector3(-0.116, 0.206, -0.357))
+	var accuracy := _module(rifle, Vector3(-0.119, 0.151, -0.405))
 	_box(accuracy, Vector3(0.060, 0.077, 0.171), Vector3.ZERO, ARMOUR)
 	_box(accuracy, Vector3(0.040, 0.035, 0.014), Vector3(0, 0.009, -0.093), AsterArt.CYAN, true)
 	for rank in range(MAX_LEVEL):
 		_rank_parts[Path.ACCURACY].append(_box(accuracy, Vector3(0.012, 0.014, 0.014), Vector3(-0.034, 0.008, -0.058 + rank * 0.029), AsterArt.CYAN, true))
 
-	var recoil := _module(rifle, Vector3(0, 0.024, 0.288))
+	var recoil := _module(rifle, Vector3(0, 0.021, 0.379))
 	for side in [-1.0, 1.0]:
-		_box(recoil, Vector3(0.059, 0.104, 0.207), Vector3(side * 0.118, 0, 0), GRAPHITE)
+		_box(recoil, Vector3(0.041, 0.080, 0.179), Vector3(side * 0.110, 0, 0), GRAPHITE)
 	for rank in range(MAX_LEVEL):
-		_rank_parts[Path.RECOIL].append(_box(recoil, Vector3(0.017, 0.068, 0.021), Vector3(0.154, 0, -0.082 + rank * 0.041), STEEL))
+		_rank_parts[Path.RECOIL].append(_box(recoil, Vector3(0.014, 0.049, 0.018), Vector3(-0.133, 0, -0.068 + rank * 0.034), STEEL))
 
 func upgrade_level(path: int) -> int:
 	return _levels[path] if path >= 0 and path < _levels.size() else -1

@@ -25,6 +25,8 @@ var _balance: AsterBalance
 var _look := Node3D.new()
 var _legs: Array[Node3D] = []
 var _shell: MeshInstance3D
+var _tail := Node3D.new()
+var _sting := Node3D.new()
 var _phase := 0.0
 var _step_travel := 0.0
 var _step_side := 1.0
@@ -36,6 +38,7 @@ var _next_wound := 0
 var _bleed_time := 0.0
 var _drip_timer := 0.0
 var _climb_pitch := 0.0
+var _ground_tilt := Vector2.ZERO
 var _windup_left := 0.0
 var _strike_left := 0.0
 var _attack_target: Node
@@ -75,13 +78,19 @@ func setup(game: Node, kind: Kind, formation_offset: Vector2) -> void:
 func _build_shell() -> void:
 	_shell = AsterModels.attach(_look, &"bug")
 	_shell.lod_bias = 0.76
+	_tail.position = Vector3(0.0, 0.67, 0.57)
+	_look.add_child(_tail)
+	AsterModels.attach(_tail, &"bug_tail", Vector3.ZERO, Vector3.ONE, false).lod_bias = 0.78
+	_sting.position = Vector3(0.0, 0.48, 0.51)
+	_tail.add_child(_sting)
+	AsterModels.attach(_sting, &"bug_sting", Vector3.ZERO, Vector3.ONE, false).lod_bias = 0.78
 	for side: float in [-1.0, 1.0]:
 		var foot_mesh: StringName = &"leg_left" if side < 0.0 else &"leg_right"
 		var claw_mesh: StringName = &"claw_left" if side < 0.0 else &"claw_right"
 		var sockets: Array[Vector3] = [
-			Vector3(side * 0.238, 0.568, -0.554),
-			Vector3(side * 0.305, 0.505, -0.35),
-			Vector3(side * 0.283, 0.502, 0.39),
+			Vector3(side * 0.260, 0.538, -0.535),
+			Vector3(side * 0.315, 0.579, -0.155),
+			Vector3(side * 0.295, 0.573, 0.403),
 		]
 		for index in range(sockets.size()):
 			var joint := Node3D.new()
@@ -127,14 +136,11 @@ func _add_wound(hit: Vector3) -> void:
 	patch = _wounds[slot]
 	_next_wound = slot + 1
 	var local := _look.to_local(hit)
-	var center := Vector3(0, 0.665, -0.11)
-	var span := Vector3(0.425, 0.25, 0.56)
-	if local.z > 0.31:
-		center = Vector3(0, 0.557, 0.428)
-		span = Vector3(0.33, 0.22, 0.33)
-	elif local.z < -0.57:
-		center = Vector3(0, 0.614, -0.758)
-		span = Vector3(0.278, 0.16, 0.31)
+	var center := Vector3(0, 0.700, 0.10)
+	var span := Vector3(0.481, 0.267, 0.66)
+	if local.z < -0.40:
+		center = Vector3(0, 0.591, -0.64)
+		span = Vector3(0.307, 0.147, 0.40)
 	var radial := ((local - center) / span).normalized()
 	if radial.is_zero_approx():
 		radial = Vector3.UP
@@ -165,6 +171,8 @@ func _physics_process(delta: float) -> void:
 			var fall := 1.0 - _death_left / FALL_TIME
 			_look.rotation.z = fall * fall * 1.39
 			_look.position.y = -fall * 0.36
+			_tail.rotation.x = move_toward(_tail.rotation.x, 0.48, delta * 2.8)
+			_sting.rotation.x = move_toward(_sting.rotation.x, -0.47, delta * 3.0)
 			_bleed(delta)
 		return
 	if _game.lost:
@@ -485,19 +493,30 @@ func _update_legs(delta: float) -> void:
 	var windup := smoothstep(0.0, 1.0, 1.0 - _windup_left / WINDUP_TIME) if _attack_target != null else 0.0
 	var strike := smoothstep(0.0, 1.0, _strike_left / STRIKE_TIME)
 	var flinch := _flash / 0.16
+	var slope_tilt := Vector2.ZERO
+	if is_on_floor() and state != &"climb" and absf(_climb_pitch) < 0.16:
+		var up := global_basis.transposed() * get_floor_normal()
+		slope_tilt = Vector2(atan2(up.z, up.y), -atan2(up.x, up.y)).limit_length(0.59)
+	_ground_tilt = _ground_tilt.lerp(slope_tilt, minf(1.0, delta * 8.5))
 	_look.position.y = cos(_phase * 2.0) * _chassis_lift + windup * 0.086
 	_look.position.z = windup * 0.11 - strike * 0.23 + flinch * 0.06
-	_look.rotation.x = _climb_pitch + windup * 0.19 - strike * 0.28
-	_look.rotation.z = sin(_phase) * (_chassis_lift * 0.87 + flinch * 0.065)
+	_look.rotation.x = _climb_pitch + _ground_tilt.x + windup * 0.19 - strike * 0.28
+	_look.rotation.z = _ground_tilt.y + sin(_phase) * (_chassis_lift * 0.87 + flinch * 0.065)
+	_tail.rotation = Vector3(0.04 + windup * 0.20 - strike * 0.27 + cos(_phase) * (0.071 if moving else 0.028),
+		sin(_phase * 0.62) * 0.095, -sin(_phase) * 0.058)
+	_sting.rotation.x = -0.063 - windup * 0.18 + strike * 0.29 + sin(_phase - 0.58) * 0.091
 	for index in range(_legs.size()):
 		var side := -1.0 if index < 3 else 1.0
 		var leg := _legs[index]
 		var socket := index % 3
 		var phase := _phase + (0.0 if side < 0.0 else PI)
 		if socket == 0:
-			leg.rotation = Vector3(-0.12 + windup * 0.63 - strike * 0.65 + sin(phase) * 0.07, side * (0.10 + windup * 0.44 - strike * 0.30), -side * (0.06 + windup * 0.23))
+			var stride := 0.13 if moving else 0.026
+			leg.rotation = Vector3(0.055 + windup * 0.58 - strike * 0.49 + sin(phase) * stride,
+				side * (0.045 + windup * 0.44 - strike * 0.30), side * (maxf(0.0, cos(phase)) * stride - windup * 0.18))
 		else:
 			phase += 2.66 if socket == 2 else 0.0
-			var stride := 0.45 if moving else 0.029
-			var sweep := side * (-0.25 if socket == 1 else 0.16)
-			leg.rotation = Vector3(stride * sin(phase), sweep, side * maxf(0.0, cos(phase)) * stride * 0.31)
+			var stride := 0.35 if moving else 0.024
+			var sweep := side * (0.12 if socket == 1 else -0.44)
+			leg.rotation = Vector3(stride * sin(phase), sweep + side * sin(phase) * stride * 0.21,
+				side * maxf(0.0, cos(phase)) * stride * 0.57)

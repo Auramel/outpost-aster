@@ -62,6 +62,7 @@ func spawn_enemy(point: Vector3, kind: AsterBug.Kind = AsterBug.Kind.GROUND, for
 		return null
 	var bug := AsterBug.new()
 	_game.add_child(bug)
+	point.y = maxf(point.y, AsterTerrain.surface_height(point.x, point.z) + 0.025)
 	bug.global_position = point
 	bug.setup(_game, kind, formation_offset)
 	bug.died.connect(_remove_enemy)
@@ -75,25 +76,37 @@ func _remove_enemy(bug: AsterBug) -> void:
 
 func _scatter(count: int) -> Array[PackedVector3Array]:
 	var routes: Array[PackedVector3Array] = []
-	var sites := AsterTerrain.SCREEN_CENTERS
+	var sites := AsterTerrain.SCREEN_SITES
 	var first_site := _rng.randi_range(0, sites.size() - 1)
 	var eye: Vector3 = _game.player.eye.global_position
 	var world: World3D = _game.get_world_3d()
 	for index in range(count):
 		for attempt in range(26):
 			var site := (first_site + index * 2 + attempt) % sites.size()
-			var center: float = sites[site]
-			var face := eye.z > AsterTerrain.SCREEN_Z + 3.75 and attempt >= 12
-			var depth := AsterTerrain.SCREEN_Z - _rng.randf_range(4.7, 7.35) if face else _rng.randf_range(SPAWN_Z, 73.0)
-			var point := Vector3(center + _rng.randf_range(-4.6, 4.6), 0.08, depth)
+			var center: Vector2 = sites[site]
+			var face := eye.z > center.y + 3.75 and attempt >= 12
+			var depth := center.y - _rng.randf_range(5.3, 7.7) if face else _rng.randf_range(maxf(SPAWN_Z, center.y + 5.6), 73.0)
+			var x := center.x + _rng.randf_range(-4.0, 4.0)
+			var point := Vector3(x, AsterTerrain.surface_height(x, depth) + 0.060, depth)
 			if not _clear_of_swarm(point, routes) or not _is_screened(world, eye, point):
 				continue
 			var route := PackedVector3Array([point])
 			if not face:
-				var side := -1.0 if _rng.randf() < 0.5 else 1.0
-				var channel := center + side * _rng.randf_range(8.05, 10.65)
-				route.append(Vector3(channel, 0.0, AsterTerrain.SCREEN_Z + 4.2))
-				route.append(Vector3(channel + _rng.randf_range(-0.8, 0.8), 0.0, AsterTerrain.SCREEN_Z - 3.75))
+				var high_route := site in AsterTerrain.HIGH_SCREEN_SITES
+				var side := -1 if _rng.randf() < 0.5 else 1
+				if high_route:
+					side = 1 if center.x < 0.0 else -1
+				var channel := center.x + side * 9.6
+				var neighbor := site + side
+				if neighbor >= 0 and neighbor < sites.size():
+					channel = (center.x + sites[neighbor].x) * 0.5
+				channel += _rng.randf_range(-0.67, 0.67)
+				route.append(Vector3(channel, 0.0, center.y + 5.08))
+				route.append(Vector3(channel + _rng.randf_range(-0.58, 0.58), 0.0, center.y - 5.05))
+				if high_route:
+					var slope := signf(center.x)
+					route.append(Vector3(slope * _rng.randf_range(16.4, 21.3), 0.0, _rng.randf_range(36.0, 41.8)))
+					route.append(Vector3(slope * _rng.randf_range(10.9, 15.2), 0.0, _rng.randf_range(23.6, 28.2)))
 			routes.append(route)
 			break
 	return routes

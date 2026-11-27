@@ -16,6 +16,7 @@ var _fumes: Array[Fume] = []
 var _next_fume := 0
 static var _fume_texture: ImageTexture
 static var _flash_texture: ImageTexture
+static var _rifle_flash_mesh: ArrayMesh
 var _beams: Array[MeshInstance3D] = []
 var _sparks: Array[MeshInstance3D] = []
 var _muzzles: Array[Sprite3D] = []
@@ -92,7 +93,7 @@ func _fume(at: Vector3, velocity: Vector3, size: float, duration: float, color: 
 	fume.age = 0.0
 	fume.sprite.show()
 
-static func muzzle_sprite(parent: Node3D, point: Vector3) -> Sprite3D:
+static func _muzzle_texture() -> ImageTexture:
 	if _flash_texture == null:
 		var pixels := Image.create_empty(FLASH_SIZE, FLASH_SIZE, false, Image.FORMAT_RGBA8)
 		for row in range(FLASH_SIZE):
@@ -107,15 +108,53 @@ static func muzzle_sprite(parent: Node3D, point: Vector3) -> Sprite3D:
 				pixels.set_pixel(column, row, color)
 		pixels.generate_mipmaps()
 		_flash_texture = ImageTexture.create_from_image(pixels)
+	return _flash_texture
+
+static func muzzle_sprite(parent: Node3D, point: Vector3) -> Sprite3D:
 	var flash_node := Sprite3D.new()
 	flash_node.position = point
-	flash_node.texture = _flash_texture
+	flash_node.texture = _muzzle_texture()
 	flash_node.pixel_size = 1.0 / FLASH_SIZE
 	flash_node.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	flash_node.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	flash_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(flash_node)
 	return flash_node
+
+static func rifle_flash(parent: Node3D, muzzle: Vector3) -> MeshInstance3D:
+	if _rifle_flash_mesh == null:
+		var surface := SurfaceTool.new()
+		surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var front := Vector3.FORWARD * 0.34
+		for angle: float in [0.0, PI / 3.0, PI * 2.0 / 3.0]:
+			var edge := Vector3(cos(angle), sin(angle), 0.0) * 0.094
+			var root := edge * 0.24
+			_flash_quad(surface, [-root, root, front + edge, front - edge], 0.44)
+		# The face-on flare keeps the flash readable through the sights.
+		var face := Vector3.FORWARD * 0.075
+		var right := Vector3.RIGHT * 0.157
+		var up := Vector3.UP * 0.157
+		_flash_quad(surface, [face - right + up, face + right + up, face + right - up, face - right - up])
+		var material := StandardMaterial3D.new()
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.cull_mode = BaseMaterial3D.CULL_DISABLED
+		material.albedo_texture = _muzzle_texture()
+		material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		surface.set_material(material)
+		_rifle_flash_mesh = surface.commit()
+	var flash_node := MeshInstance3D.new()
+	flash_node.mesh = _rifle_flash_mesh
+	flash_node.position = muzzle
+	flash_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(flash_node)
+	return flash_node
+
+static func _flash_quad(surface: SurfaceTool, corners: Array[Vector3], start_v := 0.0) -> void:
+	var uv := [Vector2(0, start_v), Vector2(1, start_v), Vector2(1, 1), Vector2(0, 1)]
+	for corner in [0, 1, 2, 0, 2, 3]:
+		surface.set_uv(uv[corner])
+		surface.add_vertex(corners[corner])
 
 func impact(point: Vector3, normal: Vector3) -> void:
 	_spark(_claim(0.035), point + normal * 0.047, AsterArt.AMBER, 0.11)

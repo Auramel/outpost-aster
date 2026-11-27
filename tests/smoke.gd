@@ -81,6 +81,8 @@ func _run() -> void:
 	await _fresh()
 	await _tuning_and_points()
 	await _fresh()
+	await _oversized_drone_delivery()
+	await _fresh()
 	await _rifle_terminal()
 	await _fresh()
 	await _turret_sustained_fire()
@@ -94,6 +96,8 @@ func _run() -> void:
 	await _gate_and_mountain()
 	await _fresh(true)
 	await _continuous_siege()
+	await _fresh()
+	await _mountain_routes()
 	await _fresh(true)
 	await _cap_and_replacements()
 	await _fresh(true)
@@ -120,16 +124,42 @@ func _assets_are_live() -> void:
 		mapped = mapped or (finish.albedo_texture == AsterModels.PARKERIZED and finish.roughness_texture == AsterModels.PARKERIZED_ROUGHNESS and finish.normal_enabled and not tangent.is_empty())
 	_expect(mapped, "imported carbine has weathered metal, roughness and tangent-space normals")
 	_expect(player._rifle_magazine.get_parent() == carbine.get_parent() and player._support_hand.get_parent() == carbine.get_parent(), "magazine and support hand are independent parts of the carbine rig")
+	var grip := player._rifle.get_node("carbine_grip") as MeshInstance3D
+	_expect(grip.layers == AsterModels.VIEWMODEL_LAYER and grip.position == AsterPlayer.FIRING_GRIP, "the firing hand mounts separately to the new carbine")
+	var triangles := carbine.mesh.get_faces()
+	var clear_sight := true
+	var open_stock := true
+	var sight_from := Vector3(0, AsterPlayer.SIGHT_HEIGHT, 0.2)
+	var sight_to := Vector3(0, AsterPlayer.SIGHT_HEIGHT, -1.05)
+	var stock_from := Vector3(-0.25, -0.08, 0.31)
+	var stock_to := Vector3(0.25, -0.08, 0.31)
+	for index in range(0, triangles.size(), 3):
+		var a := triangles[index]
+		var b := triangles[index + 1]
+		var c := triangles[index + 2]
+		clear_sight = clear_sight and Geometry3D.segment_intersects_triangle(sight_from, sight_to, a, b, c) == null
+		open_stock = open_stock and Geometry3D.segment_intersects_triangle(stock_from, stock_to, a, b, c) == null
+	_expect(clear_sight and open_stock, "the optic and stock have real unobstructed openings in the baked mesh")
+	var flash := player._gun_flash
+	var flash_material := flash.mesh.surface_get_material(0) as StandardMaterial3D
+	_expect(flash.position == AsterPlayer.MUZZLE and flash.get_aabb().end.z <= 0.0 and not flash_material.no_depth_test,
+		"rifle flash geometry stays in front of the muzzle and is occluded by the weapon")
 	var mount: AsterTurret = game.turrets[0]
 	var head: Node3D = mount.get("_head")
 	var elevation: Node3D = mount.get("_elevation")
 	_expect(head.has_node("turret_head") and mount._carriage.has_node("turret_emitters") and mount._carriage.get_parent() == elevation and elevation.get_parent() == head, "new turret meshes follow independent aim pivots")
 	var turret_mesh: MeshInstance3D = head.get_node("turret_head")
 	var sensor_found := false
+	var scanner_found := false
 	for index in range(turret_mesh.mesh.get_surface_count()):
 		var finish := turret_mesh.mesh.surface_get_material(index) as StandardMaterial3D
 		sensor_found = sensor_found or (finish.resource_name == "SignalLamp" and finish.emission_enabled)
-	_expect(sensor_found, "turret optics use the lit sensor material on the moving head")
+		scanner_found = scanner_found or (finish.resource_name == "TurretScanLamp" and finish.emission_enabled)
+	_expect(sensor_found and scanner_found, "turret optics and status lamps light up on the moving head")
+	var emitters := mount._carriage.get_node("turret_emitters") as MeshInstance3D
+	var barrel_front := emitters.get_aabb().position.z
+	_expect(absf(barrel_front - AsterTurret.MUZZLE.z) < 0.015, "turret muzzle effects align with the front of the new barrel mesh")
+	_expect(mount._kit._mounted_box.visible and not mount._kit._ammo_boxes[0].is_visible_in_tree(), "a stock turret shows its mounted ammunition cartridge")
 	var wall: AsterStructure = game.walls[0]
 	var body: Node3D = wall.get("_body_visual")
 	_expect(body.has_node("wall") and game.supply.has_node("supply") and game.rifle_terminal.has_node("station"), "base wall, supply rack and terminal use baked meshes in the real scene")
@@ -137,9 +167,20 @@ func _assets_are_live() -> void:
 	var shell: MeshInstance3D = actor.get("_shell")
 	var legs: Array = actor.get("_legs")
 	_expect(shell.mesh.get_surface_count() >= 3 and legs.size() == 6 and legs[0].has_node("claw_left") and legs[3].has_node("claw_right") and legs[1].has_node("leg_left") and legs[5].has_node("leg_right"), "insect attaches four stride legs and two separate foreclaws")
+	var chitin := false
+	for index in range(shell.mesh.get_surface_count()):
+		var finish := shell.mesh.surface_get_material(index) as StandardMaterial3D
+		chitin = chitin or (finish.albedo_texture == AsterModels.CHITIN and finish.normal_texture == AsterModels.CHITIN_NORMAL)
+	var sting := actor._sting.get_node("bug_sting") as MeshInstance3D
+	var luminous := false
+	for index in range(sting.mesh.get_surface_count()):
+		var finish := sting.mesh.surface_get_material(index) as StandardMaterial3D
+		luminous = luminous or (finish.resource_name == "DuneSporeLamp" and finish.emission_enabled)
+	_expect(chitin and luminous and actor._tail.has_node("bug_tail"), "the new shell uses dedicated chitin maps and the articulated stinger glows")
 	var environment := actor.get_world_3d().environment
-	_expect(environment.sky.sky_material is PanoramaSkyMaterial and AsterModels.floor_finish().normal_texture == AsterModels.DUST_NORMAL, "scene uses the sky panorama and textured ground")
+	_expect(environment.sky.sky_material is PanoramaSkyMaterial and AsterModels.floor_finish().normal_texture == AsterModels.CANYON_GRAVEL_NORMAL, "scene uses the daylight sky and textured canyon ground")
 	await _frames(2)
+	_expect(actor._tail.rotation.length_squared() > 0.0 and absf(actor._sting.rotation.x) > 0.0, "the lower and upper tail articulate during the bug's movement")
 
 func _last_local_sound() -> AudioStream:
 	var sound: AsterSound = game.sound
@@ -220,6 +261,7 @@ func _logistics() -> void:
 	Input.action_press(&"interact")
 	await _frames(350)
 	_expect(not right.has_box and right.rounds == 0 and player.carrying and right.service == &"", "completed removal requires releasing E before install")
+	_expect(not right._kit._mounted_box.visible, "removing ammunition hides the visible cartridge from the turret")
 	_expect(_last_service_sound().stream == game.sound._clips[&"turret_remove"], "removing a turret crate plays its release cue")
 	Input.action_release(&"interact")
 	await _frames(4)
@@ -238,6 +280,7 @@ func _logistics() -> void:
 	await _aim(right.attack_position())
 	await _press(&"interact", 190)
 	_expect(right.has_box and right.rounds == game.balance.turret_capacity and not player.carrying and is_equal_approx(player.move_speed(), normal_speed), "install consumes one crate and restores movement")
+	_expect(right._kit._mounted_box.visible, "reloading returns the cartridge to the turret model")
 	_expect(_last_service_sound().stream == game.sound._clips[&"turret_seat"], "a loaded turret gives an audible completion cue")
 
 func _hold_fire(allowed: AsterTurret = null) -> void:
@@ -464,6 +507,26 @@ func _tuning_and_points() -> void:
 	var full := left.capacity()
 	left.rounds = full - 4
 	_expect(left.receive_drone_ammo(80) == 4 and left.rounds == full, "air deliveries cannot overfill a turret")
+
+func _oversized_drone_delivery() -> void:
+	var turret: AsterTurret = game.turrets[0]
+	var tuning: AsterTurretTuning = game.turret_tuning
+	for rank in range(AsterTurretTuning.MAX_LEVEL):
+		tuning.apply_upgrade(AsterTurretTuning.Path.DRONE)
+	var drone := turret.drone
+	for rounds_before: int in [150, 0]:
+		var deliveries := drone.flights_completed
+		var carried_full_load := false
+		turret.rounds = rounds_before
+		for frame in range(360):
+			await physics_frame
+			carried_full_load = carried_full_load or drone.payload == 1300
+			if drone.flights_completed > deliveries:
+				break
+		_expect(carried_full_load and drone.flights_completed == deliveries + 1 and turret.rounds == 1000 and drone.payload == 0,
+			"drone fills a 1000-round turret from %d with an oversized 1300-round shipment" % rounds_before)
+	await _frames(15)
+	_expect(drone.flight == AsterAmmoDrone.Flight.PARKED, "the drone parks once the ammunition crate is full")
 
 func _rifle_terminal() -> void:
 	_hold_fire()
@@ -722,6 +785,34 @@ func _continuous_siege() -> void:
 			break
 		await physics_frame
 	_expect(game.kills > 0 and not game.lost, "stock turrets earn points in a real automatic siege")
+
+func _mountain_routes() -> void:
+	_hold_fire()
+	var director: AsterAssault = game.assault
+	var actors: Dictionary[int, AsterBug] = {}
+	var start_heights: Dictionary[int, float] = {}
+	for attempt in range(16):
+		for route in director._scatter(6):
+			if route.size() < 5 or route[0].y < 4.0:
+				continue
+			var side := -1 if route[0].x < 0.0 else 1
+			if actors.has(side):
+				continue
+			var bug := director.spawn_enemy(route[0])
+			bug.set_entry_path(route.slice(1))
+			actors[side] = bug
+			start_heights[side] = route[0].y
+		if actors.size() == 2:
+			break
+	_expect(actors.size() == 2, "hidden approaches lead from both elevated canyon shoulders")
+	if actors.size() != 2:
+		return
+	await _frames(1080)
+	var reached_apron := true
+	for side in actors:
+		var at := actors[side].global_position
+		reached_apron = reached_apron and at.y < start_heights[side] - 3.0 and at.z < 29.0
+	_expect(reached_apron, "bugs descend both slopes and reach the main approach under real movement physics")
 
 func _cap_and_replacements() -> void:
 	_hold_fire()
