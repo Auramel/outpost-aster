@@ -3,7 +3,7 @@ extends CharacterBody3D
 
 signal died(bug: AsterBug)
 
-enum Kind { GROUND, CLIMBER, FLYER }
+enum Kind { GROUND, CLIMBER, FLYER, TANK, CATAPULT, KAMIKAZE, TRANSPORTER, RAM, SHOOTER }
 
 const ATTACK_REACH := 1.25
 const PLAYER_NOTICE_RANGE := 4.2
@@ -12,6 +12,10 @@ const STRIKE_TIME := 0.25
 const FALL_TIME := 0.42
 
 var hp: float
+var max_hp: float
+var kind: Kind
+var transport: AsterFlyingBug
+var awards_kill := true
 var speed_factor := 1.0
 var climber: bool
 var state: StringName = &"front"
@@ -49,17 +53,21 @@ var _chassis_lift := 0.0
 var _attack := 0.25
 var _updated := 0.0
 var _ramp_turret: AsterTurret
+var _landing_stun := 0.0
+var _airborne_corpse := false
 
-func setup(game: Node, kind: Kind, formation_offset: Vector2) -> void:
+func setup(game: Node, enemy_kind: Kind, formation_offset: Vector2) -> void:
 	_game = game
 	_balance = game.balance
+	kind = enemy_kind
 	climber = kind == Kind.CLIMBER
 	_formation_offset = formation_offset
-	hp = _balance.climber_hp if climber else _balance.ground_hp
+	max_hp = _balance.climber_hp if climber else _balance.ground_hp
+	hp = max_hp
 	_power = _balance.climber_damage if climber else _balance.ground_damage
 	_speed = _balance.climber_speed if climber else _balance.ground_speed
 	collision_layer = AsterArt.ENEMY
-	collision_mask = AsterArt.SOLID
+	collision_mask = AsterArt.SOLID | AsterArt.TANK
 	floor_snap_length = 0.20
 	_build_hitbox()
 	add_child(_look)
@@ -126,10 +134,29 @@ func damage(amount: float, hit := Vector3.INF, normal := Vector3.UP) -> void:
 		return
 	remove_from_group(&"wall_occupants")
 	set_deferred(&"collision_layer", 0)
+	_airborne_corpse = state == &"carried" or state == &"transport_fall"
+	if _airborne_corpse:
+		_fall_time = 1.2
 	_death_left = _fall_time
 	set_physics_process(true)
 	_game.sound.bug_cue(AsterSound.BugCue.DEATH, hit_point())
+	_on_death()
 	died.emit(self)
+
+func _on_death() -> void:
+	pass
+
+func begin_carry() -> void:
+	state = &"carried"
+	velocity = Vector3.ZERO
+	wall = null
+	_climb_pitch = 0.0
+
+func release_from_transport(carry_velocity: Vector3, stun: float) -> void:
+	transport = null
+	state = &"transport_fall"
+	velocity = carry_velocity
+	_landing_stun = stun
 
 func _add_wound(hit: Vector3) -> void:
 	var patch: MeshInstance3D
@@ -194,13 +221,21 @@ func _physics_process(delta: float) -> void:
 	_update_pose(delta)
 
 func _update_fall(delta: float) -> void:
-	var fall := 1.0 - _death_left / FALL_TIME
+	if _airborne_corpse:
+		velocity.y -= 18.0 * delta
+		move_and_slide()
+	var fall := 1.0 - _death_left / _fall_time
 	_look.rotation.z = fall * fall * 1.39
 	_look.position.y = -fall * 0.36
 	_tail.rotation.x = move_toward(_tail.rotation.x, 0.48, delta * 2.8)
 	_sting.rotation.x = move_toward(_sting.rotation.x, -0.47, delta * 3.0)
 
 func _move(delta: float) -> void:
+	if state == &"carried":
+		return
+	if state == &"transport_fall" or state == &"transport_stun":
+		_land_from_transport(delta)
+		return
 	var step_origin := global_position
 	if state == &"ledge":
 		_climb_pitch = move_toward(_climb_pitch, 0.0, delta * 7.0)
@@ -225,6 +260,27 @@ func _move(delta: float) -> void:
 			&"ramp":
 				_attack_platform(delta)
 	_step_on_surface(step_origin)
+
+func _land_from_transport(delta: float) -> void:
+	if state == &"transport_fall":
+		velocity.y -= 18.0 * delta
+		move_and_slide()
+		if not is_on_floor():
+			return
+		state = &"transport_stun"
+		velocity = Vector3.ZERO
+		return
+	_landing_stun = maxf(0.0, _landing_stun - delta)
+	if _landing_stun > 0.0:
+		return
+	state = &"front" if global_position.z >= AsterTerrain.FRONT_Z else &"inside"
+	if global_position.y > AsterTerrain.surface_height(global_position.x, global_position.z) + 0.6:
+		var floor_hit := AsterArt.ray(get_world_3d(), global_position + Vector3.UP * 0.25, global_position + Vector3.DOWN * 0.28, AsterArt.SOLID)
+		if not floor_hit.is_empty():
+			var section := AsterArt.hit_target(floor_hit.collider) as AsterStructure
+			if section != null and not section.is_core:
+				wall = section
+				state = &"ledge"
 
 func _step_on_surface(previous: Vector3) -> void:
 	var climbing := state == &"climb"
@@ -299,7 +355,7 @@ func _approach_wall(delta: float) -> void:
 				wall = entry
 				state = &"front"
 				return
-	var outside := _wall_point(1.02 + _formation_offset.y)
+	var outside := _wall_point(_wall_standoff() + _formation_offset.y)
 	var distance := AsterArt.horizontal(global_position - outside).length()
 	if distance > 0.20:
 		_walk(outside, delta)
@@ -362,7 +418,7 @@ func _attack_core(delta: float) -> void:
 	var core: AsterStructure = _game.core
 	var face := core.global_position + Vector3(clampf(global_position.x - core.global_position.x, -1.8, 1.8), 0, AsterStructure.CORE_HALF.z)
 	var direction := AsterArt.horizontal(face - global_position)
-	if direction.length() <= ATTACK_REACH:
+	if direction.length() <= _melee_reach():
 		_turn(direction, delta)
 		_stop(delta)
 		_hit(core)
@@ -422,12 +478,13 @@ func _engage_player(delta: float) -> bool:
 	offset.y = 0.0
 	var distance := offset.length_squared()
 	var on_platform := state == &"ramp" or state == &"ledge"
-	var notice_range := ATTACK_REACH if on_platform else PLAYER_NOTICE_RANGE
+	var reach := _melee_reach()
+	var notice_range := reach if on_platform else PLAYER_NOTICE_RANGE
 	if distance > notice_range * notice_range:
 		return false
 	if not AsterArt.ray(get_world_3d(), hit_point(), point + Vector3.UP * 0.9, AsterArt.SOLID | AsterArt.ACCESS).is_empty():
 		return false
-	if distance <= ATTACK_REACH * ATTACK_REACH:
+	if distance <= reach * reach:
 		_turn(offset, delta)
 		if on_platform:
 			velocity = Vector3.ZERO
@@ -437,6 +494,12 @@ func _engage_player(delta: float) -> bool:
 	else:
 		_walk(point, delta)
 	return true
+
+func _melee_reach() -> float:
+	return ATTACK_REACH
+
+func _wall_standoff() -> float:
+	return 1.02
 
 func _hit(target_node: Node) -> void:
 	_attack_contact = true

@@ -3,10 +3,15 @@ extends RefCounted
 
 const FILE := "user://settings.cfg"
 const DEFAULT_SENSITIVITY := 0.00255
+const MIN_VIEW_DISTANCE := 120
+const MAX_VIEW_DISTANCE := 240
+const DEFAULT_VIEW_DISTANCE := 180
+const VIEW_DISTANCE_STEP := 10
 
 static var sensitivity := DEFAULT_SENSITIVITY
 static var volume := 1.0
 static var fullscreen := true
+static var view_distance := DEFAULT_VIEW_DISTANCE
 
 static func load_from_disk() -> void:
 	var config := ConfigFile.new()
@@ -14,6 +19,7 @@ static func load_from_disk() -> void:
 		sensitivity = clampf(float(config.get_value("controls", "sensitivity", DEFAULT_SENSITIVITY)), 0.0006, 0.008)
 		volume = clampf(float(config.get_value("audio", "volume", 1.0)), 0.0, 1.0)
 		fullscreen = bool(config.get_value("display", "fullscreen", true))
+		view_distance = clampi(snappedi(int(config.get_value("display", "view_distance", DEFAULT_VIEW_DISTANCE)), VIEW_DISTANCE_STEP), MIN_VIEW_DISTANCE, MAX_VIEW_DISTANCE)
 	apply_volume()
 
 static func save() -> void:
@@ -21,6 +27,7 @@ static func save() -> void:
 	config.set_value("controls", "sensitivity", sensitivity)
 	config.set_value("audio", "volume", volume)
 	config.set_value("display", "fullscreen", fullscreen)
+	config.set_value("display", "view_distance", view_distance)
 	config.save(FILE)
 
 static func apply_volume() -> void:

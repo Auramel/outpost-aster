@@ -12,10 +12,14 @@ var _wings: Array[Node3D] = []
 var _flight_left := 0.0
 var _recovery_point := Vector3.ZERO
 var _turn_side := 1.0
+var _victim: Node3D
+var _nest_top := Vector3.ZERO
+var _launch_wait := 0.0
 
-func setup(game: Node, kind: Kind, formation_offset: Vector2) -> void:
-	super.setup(game, kind, formation_offset)
-	hp = _balance.flyer_hp
+func setup(game: Node, enemy_kind: Kind, formation_offset: Vector2) -> void:
+	super.setup(game, enemy_kind, formation_offset)
+	max_hp = _balance.flyer_hp
+	hp = max_hp
 	_power = _balance.flyer_damage
 	_speed = _balance.flyer_speed
 	_fall_time = 1.65
@@ -46,44 +50,95 @@ func _build_shell() -> void:
 		_wings.append(wing)
 		AsterModels.attach(wing, &"flyer_wing", Vector3.ZERO, Vector3(side, 1.0, 1.0), false)
 
+func launch_from_nest() -> void:
+	state = &"launch"
+	_nest_top = global_position + Vector3.UP * 4.1 + Vector3.FORWARD * 2.45
+	_launch_wait = randf_range(0.18, 0.52)
+
 func _move(delta: float) -> void:
-	var player: AsterPlayer = _game.player
-	if not player.alive:
-		state = &"cruise"
-		var orbit := Vector3(sin(_phase * 0.16) * 5.0, FLIGHT_HEIGHT, AsterTerrain.FRONT_APPROACH_Z + 8.0 + cos(_phase * 0.16) * 4.0)
-		_cruise(orbit, delta)
+	if state == &"launch":
+		_launch(delta)
 		return
+	var victim := _choose_victim()
+	if not is_instance_valid(victim):
+		return
+	if victim != _victim:
+		_victim = victim
+		state = &"cruise"
 	_flight_left = maxf(0.0, _flight_left - delta)
+	var point := _aim_position(victim)
 	match state:
 		&"dive":
-			_dive(player, delta)
+			_dive(victim, point, delta)
 		&"recover":
 			_cruise(_recovery_point, delta)
 			if _flight_left <= 0.0:
 				state = &"cruise"
 		_:
-			var point := player.global_position
-			var offset := point - global_position
-			if AsterArt.horizontal(offset).length_squared() <= DIVE_RANGE * DIVE_RANGE and absf(offset.y) < 7.0 and _clear_to(point + Vector3.UP * 0.9):
+			var offset := point - hit_point()
+			if AsterArt.horizontal(offset).length_squared() <= DIVE_RANGE * DIVE_RANGE and absf(offset.y) < 7.0 and _clear_to(point, victim):
 				state = &"dive"
 				_flight_left = DIVE_TIME
-				_dive(player, delta)
+				_dive(victim, point, delta)
 			else:
 				_cruise(point + Vector3.UP * FLIGHT_HEIGHT, delta)
 
-func _dive(player: AsterPlayer, delta: float) -> void:
-	var target := player.global_position + Vector3.UP * 0.9
-	if _flight_left <= 0.0 or not _clear_to(target):
-		_recover(player.global_position)
+func _launch(delta: float) -> void:
+	_launch_wait -= delta
+	if _launch_wait <= 0.0:
+		_fly_toward(_nest_top, _speed * 0.62, delta)
+		if global_position.y > _nest_top.y - 0.32:
+			state = &"cruise"
+
+func _choose_victim() -> Node3D:
+	var player: AsterPlayer = _game.player
+	if player.alive:
+		return player
+	var selected: Node3D
+	var nearest := INF
+	for mount: AsterTurret in _game.turrets:
+		if mount.hp > 0.0 and not mount.rebuilding:
+			var distance := global_position.distance_squared_to(mount.global_position)
+			if distance < nearest:
+				selected = mount
+				nearest = distance
+	if selected != null:
+		return selected
+	for structure: AsterStructure in [_game.core] + _game.walls:
+		if structure.hp > 0.0:
+			var distance := global_position.distance_squared_to(structure.global_position)
+			if distance < nearest:
+				selected = structure
+				nearest = distance
+	return selected
+
+func _aim_position(victim: Node3D) -> Vector3:
+	if victim is AsterPlayer:
+		return victim.global_position + Vector3.UP * 0.90
+	if victim is AsterTurret:
+		return victim.attack_position()
+	var structure := victim as AsterStructure
+	var local := structure.to_local(global_position)
+	if structure.is_core:
+		return structure.to_global(Vector3(clampf(local.x, -1.85, 1.85), 1.7, AsterStructure.CORE_HALF.z + 0.12))
+	var outside := local.z >= AsterStructure.WALL_CENTER
+	var face := AsterStructure.OUTER_FACE if outside else AsterStructure.OUTER_FACE - AsterStructure.WALL_DEPTH
+	if structure.is_gate:
+		face = AsterStructure.GATE_PANEL_DEPTH * (0.5 if local.z >= 0.0 else -0.5)
+	return structure.to_global(Vector3(clampf(local.x, -1.72, 1.72), 1.86, face + (0.22 if outside else -0.22)))
+
+func _dive(victim: Node3D, point: Vector3, delta: float) -> void:
+	if _flight_left <= 0.0 or not _clear_to(point, victim):
+		_recover(point)
 		return
-	if hit_point().distance_squared_to(target) > DIVE_REACH * DIVE_REACH:
-		_fly_toward(player.global_position + Vector3.UP * 0.67, _speed * 1.18, delta)
+	if hit_point().distance_squared_to(point) > DIVE_REACH * DIVE_REACH:
+		_fly_toward(point - Vector3.UP * 0.23, _speed * 1.18, delta)
 		return
 	velocity = Vector3.ZERO
-	_turn(AsterArt.horizontal(target - global_position), delta)
-	_hit(player)
+	_turn(AsterArt.horizontal(point - global_position), delta)
+	_hit(victim)
 	if _strike_left > 0.0:
-		_recover(player.global_position)
+		_recover(point)
 
 func _recover(point: Vector3) -> void:
 	var away := AsterArt.horizontal(global_position - point).normalized()
@@ -107,8 +162,9 @@ func _cruise(point: Vector3, delta: float) -> void:
 				point.y = global_position.y
 	_fly_toward(point, _speed, delta)
 
-func _clear_to(point: Vector3) -> bool:
-	return AsterArt.ray(get_world_3d(), hit_point(), point, COVER).is_empty()
+func _clear_to(point: Vector3, victim: Node3D = null) -> bool:
+	var hit := AsterArt.ray(get_world_3d(), hit_point(), point, COVER)
+	return hit.is_empty() or (victim != null and AsterArt.hit_target(hit.collider) == victim)
 
 func _fly_toward(point: Vector3, speed: float, delta: float) -> void:
 	var offset := point - global_position
@@ -121,6 +177,8 @@ func _fly_toward(point: Vector3, speed: float, delta: float) -> void:
 func _update_pose(delta: float) -> void:
 	_phase += delta * 5.2
 	var swing := sin(_phase * 7.5)
+	if state == &"launch" and _launch_wait > 0.0:
+		swing = -0.65
 	var strike := smoothstep(0.0, 1.0, _strike_left / STRIKE_TIME)
 	_look.position.y = sin(_phase) * 0.064
 	_look.rotation.x = lerpf(_look.rotation.x, clampf(velocity.y * 0.054, -0.35, 0.29) - strike * 0.16, minf(delta * 10.0, 1.0))

@@ -3,7 +3,9 @@ extends Node3D
 
 const RIFLE_SPEED := 145.0
 const TURRET_SPEED := 162.0
-const MAX_ROUNDS := 144
+const GAUSS_SPEED := 365.0
+const MAX_ROUNDS := 256
+const ROCKET_GRAVITY := 42.0
 const MAX_CASES := 96
 const CASE_LIFE := 2.9
 
@@ -13,6 +15,10 @@ class Round:
 	var remaining: float
 	var damage: float
 	var heavy: bool
+	var blast_radius: float
+	var velocity := Vector3.ZERO
+	var trail_left := 0.0
+	var gauss := false
 
 class Casing:
 	var position: Vector3
@@ -29,6 +35,7 @@ var _free_rounds: Array[Round] = []
 var _free_cases: Array[Casing] = []
 var _round_mesh: MultiMesh
 var _case_mesh: MultiMesh
+var _gauss_mesh: MultiMesh
 var _game: Node
 
 func setup(game: Node) -> void:
@@ -37,6 +44,10 @@ func setup(game: Node) -> void:
 	streak.size = Vector3(0.022, 0.022, 0.86)
 	streak.material = AsterArt.material(Color("#ffe49b"), true)
 	_round_mesh = _batch(streak, MAX_ROUNDS)
+	var needle := BoxMesh.new()
+	needle.size = Vector3(0.030, 0.030, 2.8)
+	needle.material = AsterArt.material(Color("#c2f4ff"), true)
+	_gauss_mesh = _batch(needle, MAX_ROUNDS)
 	var brass := CylinderMesh.new()
 	brass.height = 0.11
 	brass.top_radius = 0.022
@@ -62,7 +73,30 @@ func _batch(mesh: Mesh, limit: int) -> MultiMesh:
 	add_child(renderer)
 	return batch
 
-func fire(origin: Vector3, direction: Vector3, distance: float, damage: float, heavy: bool, port: Vector3, ejection: Vector3) -> void:
+func fire(origin: Vector3, direction: Vector3, distance: float, damage: float, heavy: bool, port: Vector3, ejection: Vector3, blast_radius := 0.0, gauss := false) -> void:
+	var bullet := _new_round(origin, direction, distance, damage, heavy, blast_radius)
+	bullet.velocity = Vector3.ZERO
+	bullet.gauss = gauss
+	if blast_radius <= 0.0 and not gauss:
+		_eject(port, ejection, heavy)
+
+static func rocket_duration(origin: Vector3, target: Vector3) -> float:
+	var distance := AsterArt.horizontal(target - origin).length()
+	return clampf(1.08 + distance * 0.019, 1.36, 3.65)
+
+static func rocket_velocity(origin: Vector3, target: Vector3) -> Vector3:
+	var duration := rocket_duration(origin, target)
+	return (target - origin) / duration + Vector3.UP * (ROCKET_GRAVITY * duration * 0.5)
+
+func fire_rocket(origin: Vector3, target: Vector3, damage: float, radius: float) -> Vector3:
+	var velocity := rocket_velocity(origin, target)
+	var rocket := _new_round(origin, velocity, rocket_duration(origin, target), damage, true, radius)
+	rocket.velocity = velocity
+	rocket.gauss = false
+	rocket.trail_left = 0.0
+	return velocity
+
+func _new_round(origin: Vector3, direction: Vector3, remaining: float, damage: float, heavy: bool, blast_radius: float) -> Round:
 	var bullet: Round
 	if _rounds.size() == MAX_ROUNDS:
 		bullet = _rounds.pop_front()
@@ -72,11 +106,12 @@ func fire(origin: Vector3, direction: Vector3, distance: float, damage: float, h
 		bullet = _free_rounds.pop_back()
 	bullet.position = origin
 	bullet.direction = direction.normalized()
-	bullet.remaining = distance
+	bullet.remaining = remaining
 	bullet.damage = damage
 	bullet.heavy = heavy
+	bullet.blast_radius = blast_radius
 	_rounds.append(bullet)
-	_eject(port, ejection, heavy)
+	return bullet
 
 func _eject(port: Vector3, ejection: Vector3, heavy: bool) -> void:
 	var casing: Casing
@@ -101,15 +136,26 @@ func tick(delta: float) -> void:
 	var world := get_world_3d()
 	for index in range(_rounds.size() - 1, -1, -1):
 		var bullet := _rounds[index]
-		var speed := TURRET_SPEED if bullet.heavy else RIFLE_SPEED
-		var distance := minf(bullet.remaining, speed * delta)
-		var endpoint := bullet.position + bullet.direction * distance
+		var speed := GAUSS_SPEED if bullet.gauss else TURRET_SPEED if bullet.heavy else RIFLE_SPEED
+		var rocket := bullet.velocity != Vector3.ZERO
+		var step := minf(bullet.remaining, delta if rocket else speed * delta)
+		var endpoint := bullet.position + bullet.direction * step
+		if rocket:
+			endpoint = bullet.position + bullet.velocity * step - Vector3.UP * (0.5 * ROCKET_GRAVITY * step * step)
+			bullet.velocity.y -= ROCKET_GRAVITY * step
+			bullet.direction = bullet.velocity.normalized()
+			bullet.trail_left -= delta
+			if bullet.trail_left <= 0.0:
+				_game.effects.rocket_trail(bullet.position)
+				bullet.trail_left = 0.075
 		var mask := AsterArt.SOLID | AsterArt.ENEMY
 		if not bullet.heavy:
 			mask |= AsterArt.ACCESS
 		var hit := AsterArt.ray(world, bullet.position, endpoint, mask)
 		if not hit.is_empty():
-			if hit.collider is AsterBug and hit.collider.hp > 0.0:
+			if bullet.blast_radius > 0.0:
+				_game.artillery_impact(hit.position, hit.normal, bullet.damage, bullet.blast_radius, rocket)
+			elif hit.collider is AsterBug and hit.collider.hp > 0.0:
 				hit.collider.damage(bullet.damage, hit.position, hit.normal)
 				if not bullet.heavy and _game.player.alive:
 					_game.player.hit_flash = 0.16
@@ -120,8 +166,10 @@ func tick(delta: float) -> void:
 			_rounds.remove_at(index)
 		else:
 			bullet.position = endpoint
-			bullet.remaining -= distance
+			bullet.remaining -= step
 			if bullet.remaining <= 0.0:
+				if bullet.blast_radius > 0.0:
+					_game.artillery_impact(endpoint, -bullet.direction, bullet.damage, bullet.blast_radius, rocket)
 				_free_rounds.append(bullet)
 				_rounds.remove_at(index)
 
@@ -145,12 +193,22 @@ func tick(delta: float) -> void:
 					casing.spin = 0.0
 
 func _process(_delta: float) -> void:
-	for index in range(_rounds.size()):
-		var bullet := _rounds[index]
+	var regular := 0
+	var gauss := 0
+	for bullet in _rounds:
 		var up := Vector3.UP if absf(bullet.direction.y) < 0.98 else Vector3.RIGHT
-		var size := Vector3.ONE if bullet.heavy else Vector3(0.70, 0.70, 0.78)
-		_round_mesh.set_instance_transform(index, Transform3D(Basis.looking_at(bullet.direction, up).scaled_local(size), bullet.position - bullet.direction * 0.35))
-	_round_mesh.visible_instance_count = _rounds.size()
+		var basis := Basis.looking_at(bullet.direction, up)
+		if bullet.gauss:
+			_gauss_mesh.set_instance_transform(gauss, Transform3D(basis, bullet.position - bullet.direction * 1.15))
+			gauss += 1
+			continue
+		var size := Vector3(4.2, 4.2, 2.5) if bullet.blast_radius > 0.0 else Vector3.ONE if bullet.heavy else Vector3(0.70, 0.70, 0.78)
+		if bullet.velocity != Vector3.ZERO:
+			size = Vector3(2.9, 2.9, 1.6)
+		_round_mesh.set_instance_transform(regular, Transform3D(basis.scaled_local(size), bullet.position - bullet.direction * 0.35))
+		regular += 1
+	_round_mesh.visible_instance_count = regular
+	_gauss_mesh.visible_instance_count = gauss
 	for index in range(_cases.size()):
 		var casing := _cases[index]
 		var size := casing.size * minf(1.0, casing.life / 0.36)

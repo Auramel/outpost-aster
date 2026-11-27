@@ -11,6 +11,32 @@ const PATH_NOTES := [
 	"Меньше подброс и разброс · амортизаторы",
 ]
 
+const SPECIAL_NOTES := [
+	"Темп огня",
+	"Урон попадания",
+	"Радиус поиска целей",
+	"Максимальный боезапас",
+	"Скорость и груз за рейс",
+	"Меньше отдача и разброс",
+]
+const SUPPORT_TITLES := ["Темп залпов", "Урон", "Дальность", "Радиус взрыва"]
+const SUPPORT_NOTES := ["Меньше пауза между залпами", "Урон в центре взрыва", "Дальность огневой поддержки", "Больше площадь удара"]
+const ROLES := [
+	"Универсальная оборона",
+	"Максимальный запас здоровья цели, затем дистанция",
+	"Противовоздушная оборона",
+	"Навесный огонь по скоплениям наземных целей",
+	"Вызываемая огневая поддержка",
+]
+
+const THUMBNAILS := [
+	preload("res://assets/art/turrets/turret_1.png"),
+	preload("res://assets/art/turrets/turret_2.png"),
+	preload("res://assets/art/turrets/turret_3.png"),
+	preload("res://assets/art/turrets/turret_4.png"),
+	preload("res://assets/art/turrets/turret_5.png"),
+]
+
 const RIFLE_TITLES := ["Скорострельность", "Урон", "Точность", "Компенсация отдачи"]
 const RIFLE_NOTES := [
 	"Темп огня · усиленный привод",
@@ -31,6 +57,11 @@ var _ranks: Array[Label] = []
 var _values: Array[Label] = []
 var _buy: Array[Button] = []
 var _close: Button
+var _turret_tabs: Array[Button] = []
+var _rifle_tab: Button
+var _support_panel: VBoxContainer
+var _support_status: Label
+var _support: Array[Button] = []
 
 func setup(game: Node, appearance: Control) -> void:
 	_game = game
@@ -54,6 +85,23 @@ func setup(game: Node, appearance: Control) -> void:
 	_funds = _appearance._label(header, "", 25, _appearance.AMBER)
 	_funds.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_status = _appearance._label(content, "", 17, _appearance.MUTED)
+	var tabs := HBoxContainer.new()
+	content.add_child(tabs)
+	for type in range(AsterTurretTuning.TITLES.size()):
+		var button: Button = _appearance._button(tabs, AsterTurretTuning.TITLES[type])
+		button.toggle_mode = true
+		button.custom_minimum_size.y = 48
+		button.icon = THUMBNAILS[type]
+		button.add_theme_constant_override(&"icon_max_width", 42)
+		button.add_theme_font_size_override(&"font_size", 19)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.pressed.connect(_select_turret.bind(type))
+		_turret_tabs.append(button)
+	_rifle_tab = _appearance._button(tabs, "Автомат")
+	_rifle_tab.toggle_mode = true
+	_rifle_tab.custom_minimum_size = Vector2(113, 48)
+	_rifle_tab.add_theme_font_size_override(&"font_size", 19)
+	_rifle_tab.pressed.connect(_select_tab.bind(true))
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.add_theme_constant_override(&"h_separation", 12)
@@ -61,6 +109,22 @@ func setup(game: Node, appearance: Control) -> void:
 	content.add_child(grid)
 	for path in range(TITLES.size()):
 		_add_card(grid, path)
+	_support_panel = VBoxContainer.new()
+	content.add_child(_support_panel)
+	_appearance._label(_support_panel, "Вызов огневой поддержки", 18, _appearance.INK)
+	var bastions := GridContainer.new()
+	bastions.columns = 2
+	bastions.add_theme_constant_override(&"h_separation", 12)
+	_support_panel.add_child(bastions)
+	for index in range(game.dreadnoughts.size()):
+		var side := "Западный" if game.dreadnoughts[index].position.x < 0.0 else "Восточный"
+		var number := floori(index * 0.5) + 1
+		var button: Button = _appearance._button(bastions, "%s бастион %d · %d очк." % [side, number, AsterDreadnought.PRICE])
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.custom_minimum_size.y = 44
+		button.pressed.connect(_buy_support.bind(index))
+		_support.append(button)
+	_support_status = _appearance._label(_support_panel, "", 15, _appearance.AMBER)
 	var footer := HBoxContainer.new()
 	content.add_child(footer)
 	var hint: Label = _appearance._label(footer, "Esc · Возврат на базу", 16, _appearance.MUTED)
@@ -103,25 +167,43 @@ func _add_card(grid: GridContainer, path: int) -> void:
 	_buy.append(button)
 
 func show_menu() -> void:
-	var rifle: bool = _game.rifle_tuning_open
-	_heading.text = "ТЮНИНГ АВТОМАТА" if rifle else "ТЮНИНГ ТУРЕЛЕЙ"
-	var titles: Array = RIFLE_TITLES if rifle else TITLES
-	var notes: Array = RIFLE_NOTES if rifle else PATH_NOTES
+	show()
+	_select_tab(_game.rifle_tuning_open)
+	_close.grab_focus()
+
+func _select_turret(type: int) -> void:
+	_game.turret_tuning_tab = type
+	_select_tab(false)
+
+func _select_tab(rifle: bool) -> void:
+	_game.rifle_tuning_open = rifle
+	var type: int = _game.turret_tuning_tab
+	var support := not rifle and type == AsterTurretTuning.Type.DREADNOUGHT
+	for index in range(_turret_tabs.size()):
+		_turret_tabs[index].set_pressed_no_signal(not rifle and type == index)
+	_rifle_tab.set_pressed_no_signal(rifle)
+	_heading.text = "ПОЛЕВОЙ ТЕРМИНАЛ"
+	_support_panel.visible = support
+	_support_status.text = ""
+	var titles: Array = RIFLE_TITLES if rifle else SUPPORT_TITLES if support else TITLES
+	var notes: Array = RIFLE_NOTES if rifle else SUPPORT_NOTES if support else PATH_NOTES if type == AsterTurretTuning.Type.THRESHER else SPECIAL_NOTES
 	for path in range(_cards.size()):
 		_cards[path].visible = path < titles.size()
 		if path < titles.size():
 			_card_titles[path].text = titles[path]
 			_card_notes[path].text = notes[path]
-	show()
 	refresh()
-	_close.grab_focus()
 
 func _target() -> Variant:
-	return _game.player.rifle_tuning if _game.rifle_tuning_open else _game.turret_tuning
+	return _game.player.rifle_tuning if _game.rifle_tuning_open else _game.turret_tunings[_game.turret_tuning_tab]
 
 func _buy_upgrade(path: int) -> void:
 	_game.purchase_tuning(_target(), path)
 	refresh()
+
+func _buy_support(index: int) -> void:
+	if not _game.purchase_support(index):
+		_support_status.text = "Нет открытой цели для выбранного бастиона"
 
 func refresh() -> void:
 	var rifle: bool = _game.rifle_tuning_open
@@ -130,8 +212,10 @@ func refresh() -> void:
 	if rifle:
 		_status.text = "АВТОМАТ АСТЕР   ·   Магазин  %d/%d   ·   Резерв  %d" % [_game.player.magazine, _game.balance.rifle_magazine, _game.player.reserve]
 	else:
-		_status.text = "Каждая покупка улучшает все %d турели" % _game.turrets.size()
-	var count := RIFLE_TITLES.size() if rifle else TITLES.size()
+		_status.text = ROLES[target.type]
+	for index in range(_support.size()):
+		_support[index].disabled = _game.combat_points < AsterDreadnought.PRICE or _game.dreadnoughts[index].busy()
+	var count: int = RIFLE_TITLES.size() if rifle else target.path_count()
 	var cap := AsterRifleTuning.MAX_LEVEL if rifle else AsterTurretTuning.MAX_LEVEL
 	for path in range(count):
 		var level: int = target.upgrade_level(path)
@@ -158,23 +242,27 @@ func _describe(tuning: AsterTurretTuning, path: int, level: int) -> String:
 	var current := tuning.stat(path, level)
 	var next := tuning.stat(path, level + 1)
 	var maxed := level == AsterTurretTuning.MAX_LEVEL
+	var unit := "ракет" if tuning.type == AsterTurretTuning.Type.BULBA else "патр."
+	var support := tuning.type == AsterTurretTuning.Type.DREADNOUGHT
 	match path:
 		AsterTurretTuning.Path.RATE:
-			return "%.1f выстр./с" % current if maxed else "%.1f → %.1f выстр./с" % [current, next]
+			if support:
+				return "%.2f с" % (1.0 / current) if maxed else "%.2f → %.2f с между залпами" % [1.0 / current, 1.0 / next]
+			return "%.2f выстр./с" % current if maxed else "%.2f → %.2f выстр./с" % [current, next]
 		AsterTurretTuning.Path.DAMAGE:
-			return "%.1f за выстрел" % current if maxed else "%.1f → %.1f за выстрел" % [current, next]
+			return "%.1f за попадание" % current if maxed else "%.1f → %.1f за попадание" % [current, next]
 		AsterTurretTuning.Path.RANGE:
 			return "%.1f м" % current if maxed else "%.1f → %.1f м" % [current, next]
 		AsterTurretTuning.Path.CAPACITY:
-			return "%d патр." % roundi(current) if maxed else "%d → %d патр." % [roundi(current), roundi(next)]
+			if support:
+				return "%.1f м" % current if maxed else "%.1f → %.1f м" % [current, next]
+			return "%d %s" % [roundi(current), unit] if maxed else "%d → %d %s" % [roundi(current), roundi(next), unit]
 		AsterTurretTuning.Path.DRONE:
 			var rate_now := tuning.drone_speed(level)
 			var rate_next := tuning.drone_speed(level + 1)
-			if level == 0:
-				return "Установить · %d патр. за рейс · %.1f м/с" % [roundi(next), rate_next]
 			if maxed:
-				return "%d патр. за рейс · %.1f м/с" % [roundi(current), rate_now]
-			return "%d → %d патр. за рейс · %.1f → %.1f м/с" % [roundi(current), roundi(next), rate_now, rate_next]
+				return "%d %s за рейс · %.1f м/с" % [roundi(current), unit, rate_now]
+			return "%d → %d %s · %.1f → %.1f м/с" % [roundi(current), roundi(next), unit, rate_now, rate_next]
 		AsterTurretTuning.Path.STABILITY:
 			return "%d%% отдачи и разброса" % -roundi(current * 100.0) if maxed else "%d%% → %d%%" % [-roundi(current * 100.0), -roundi(next * 100.0)]
 	return ""

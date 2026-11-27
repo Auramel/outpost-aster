@@ -4,6 +4,11 @@ extends Node3D
 const COUNT := 32
 const FLASH_SIZE := 64
 const FUME_COUNT := 48
+const BLAST_COUNT := 12
+const BLAST_DURATION := 2.0
+const SCORCH_LIMIT := 32
+const ROCKET_BLAST := preload("res://assets/art/rocket_blast.gdshader")
+const KAMIKAZE_RESIDUE := preload("res://assets/art/kamikaze_residue.gdshader")
 
 class Fume:
 	var sprite: Sprite3D
@@ -12,6 +17,17 @@ class Fume:
 	var duration := 0.0
 	var size := 0.0
 
+class Blast:
+	var plate: MeshInstance3D
+	var light: OmniLight3D
+	var point := Vector3.ZERO
+	var normal := Vector3.UP
+	var age := 0.0
+	var size := 0.0
+
+var _blasts: Array[Blast] = []
+var _scorches: Array[MeshInstance3D] = []
+var _next_blast := 0
 var _fumes: Array[Fume] = []
 var _next_fume := 0
 static var _fume_texture: ImageTexture
@@ -46,6 +62,24 @@ func _ready() -> void:
 		fume.sprite = sprite
 		_fumes.append(fume)
 
+	var fireball := QuadMesh.new()
+	var flame := ShaderMaterial.new()
+	flame.shader = ROCKET_BLAST
+	fireball.material = flame
+	for index in range(BLAST_COUNT):
+		var blast := Blast.new()
+		blast.plate = MeshInstance3D.new()
+		blast.plate.mesh = fireball
+		blast.plate.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(blast.plate)
+		blast.plate.hide()
+		blast.light = OmniLight3D.new()
+		blast.light.light_color = Color("#ffad5c")
+		blast.light.omni_attenuation = 1.6
+		add_child(blast.light)
+		blast.light.hide()
+		_blasts.append(blast)
+
 func _claim(life: float) -> int:
 	var slot := _next
 	_next = (_next + 1) % COUNT
@@ -65,13 +99,39 @@ func repair_beam(from: Vector3, hit: Vector3) -> void:
 	beam.show()
 	_spark(slot, hit, AsterArt.CYAN, 0.085)
 
-func flash(origin: Vector3, direction: Vector3) -> void:
+func flash(origin: Vector3, direction: Vector3, size := 1.0) -> void:
 	var slot := _claim(0.043)
 	var muzzle := _muzzles[slot]
 	muzzle.global_position = origin + direction * 0.16
-	muzzle.scale = Vector3.ONE * randf_range(0.79, 1.14)
+	muzzle.scale = Vector3.ONE * randf_range(0.79, 1.14) * size
 	muzzle.show()
 	muzzle_gas(origin, direction, true)
+
+func gauss_flash(origin: Vector3, direction: Vector3) -> void:
+	var slot := _claim(0.092)
+	var beam := _beams[slot]
+	beam.global_position = origin + direction * 0.48
+	beam.look_at(origin + direction * 1.1, _up_for(direction))
+	beam.scale = Vector3(0.041, 0.041, 0.92)
+	beam.show()
+	_spark(slot, origin + direction * 0.13, Color("#c3f2ff"), 0.23)
+
+func rocket_flash(origin: Vector3, direction: Vector3) -> void:
+	flash(origin, direction, 1.85)
+	_fume(origin, -direction * 1.6 + Vector3.UP * 0.70, 1.35, 1.2, Color("#a39889"))
+
+func rocket_trail(origin: Vector3) -> void:
+	_fume(origin, Vector3(0.26, 0.68, 0.15), 0.58, 1.25, Color("#bab4a9"))
+
+func artillery_flash(origin: Vector3, direction: Vector3) -> void:
+	var slot := _claim(0.13)
+	var muzzle := _muzzles[slot]
+	muzzle.global_position = origin + direction * 0.44
+	muzzle.scale = Vector3.ONE * 4.3
+	muzzle.show()
+	for index in range(4):
+		_fume(origin + direction * (0.6 + index * 0.45), direction * (7.3 - index * 0.8) + Vector3.UP * 0.86,
+			1.9 + index * 0.31, 1.35 + index * 0.30, Color("#72665d"))
 
 func muzzle_gas(origin: Vector3, direction: Vector3, heavy: bool) -> void:
 	var size := 0.63 if heavy else 0.50
@@ -156,6 +216,123 @@ static func _flash_quad(surface: SurfaceTool, corners: Array[Vector3], start_v :
 		surface.set_uv(uv[corner])
 		surface.add_vertex(corners[corner])
 
+func artillery_impact(point: Vector3, normal: Vector3) -> void:
+	var slot := _claim(0.12)
+	_spark(slot, point + normal * 0.35, Color("#ffc07c"), 2.45)
+	for index in range(5):
+		var bearing := index * TAU / 5.0
+		var drift := Vector3(cos(bearing), 0.85, sin(bearing))
+		_fume(point + drift * 0.72, drift * 2.05, 2.22 + index * 0.42, 1.44 + index * 0.24, Color("#514a42"))
+
+func rocket_impact(point: Vector3, normal: Vector3, radius: float) -> void:
+	var blast := _blasts[_next_blast]
+	_next_blast = (_next_blast + 1) % BLAST_COUNT
+	blast.age = 0.0
+	blast.point = point
+	blast.normal = normal
+	blast.size = radius
+	blast.plate.set_instance_shader_parameter(&"variation", randf())
+	blast.plate.show()
+	blast.light.global_position = point + normal * 0.80 + Vector3.UP * 0.35
+	blast.light.omni_range = radius * 3.0
+	blast.light.light_energy = 4.5
+	blast.light.show()
+	_update_blast(blast, get_viewport().get_camera_3d())
+	_ground_residue(point, radius * 0.83, true)
+
+func _update_blast(blast: Blast, camera: Camera3D) -> void:
+	var progress := blast.age / BLAST_DURATION
+	var bloom := 1.0 - exp(-blast.age * 9.0)
+	var extent := blast.size * (0.85 + bloom * 1.04 + progress * 0.62)
+	var center := blast.point + blast.normal * 0.45 + Vector3.UP * (extent * 0.27 + progress * 0.65)
+	var orientation := camera.global_basis if is_instance_valid(camera) else Basis.IDENTITY
+	blast.plate.global_transform = Transform3D(orientation.scaled_local(Vector3.ONE * extent), center)
+	blast.plate.set_instance_shader_parameter(&"progress", progress)
+	if blast.age < 0.23:
+		blast.light.light_energy = 4.5 * (1.0 - blast.age / 0.23)
+	else:
+		blast.light.hide()
+
+func kamikaze_impact(point: Vector3, radius: float) -> void:
+	_spark(_claim(0.085), point, Color("#ffd275"), 1.50)
+	for index in range(6):
+		var angle := index * TAU / 6.0
+		var direction := Vector3(cos(angle), 0.24, sin(angle))
+		_fume(point + direction * 0.3, direction * 4.6, 1.42 + index * 0.083, 0.55 + index * 0.074, Color("#ae702c"))
+	_ground_residue(point, radius)
+
+func _ground_residue(point: Vector3, radius: float, scorch := false) -> void:
+	var above := point + Vector3.UP * 0.15 if scorch else point
+	var below := point + Vector3.DOWN * (2.8 if scorch else 120.0)
+	var ground := AsterArt.ray(get_world_3d(), above, below, AsterArt.SOLID | AsterArt.ACCESS)
+	if ground.is_empty() or (scorch and ground.normal.y < 0.57):
+		return
+	var center: Vector3 = ground.position
+	var height := point.y - center.y
+	var reach := maxf(radius * 0.39, sqrt(maxf(0.0, radius * radius - height * height)))
+	var vertices := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var cells := PackedInt32Array()
+	var supported := PackedByteArray()
+	const STEPS := 8
+	for z in range(STEPS + 1):
+		for x in range(STEPS + 1):
+			var uv := Vector2(x, z) / STEPS
+			var sample := center + Vector3(uv.x * 2.0 - 1.0, 0, uv.y * 2.0 - 1.0) * reach
+			var floor_hit := AsterArt.ray(get_world_3d(), sample + Vector3.UP * 0.6, sample + Vector3.DOWN * 0.77, AsterArt.SOLID | AsterArt.ACCESS)
+			var has_floor: bool = not floor_hit.is_empty() and floor_hit.normal.y > 0.57
+			if has_floor:
+				sample = floor_hit.position
+			sample.y += 0.023
+			vertices.append(to_local(sample))
+			uvs.append(uv)
+			supported.append(int(has_floor))
+	for z in range(STEPS):
+		for x in range(STEPS):
+			var corner := z * (STEPS + 1) + x
+			var far_corner := corner + STEPS + 1
+			if scorch and (supported[corner] + supported[corner + 1] + supported[far_corner] + supported[far_corner + 1] < 4):
+				continue
+			cells.append_array(PackedInt32Array([corner, corner + 1, far_corner, corner + 1, far_corner + 1, far_corner]))
+	if cells.is_empty():
+		return
+	var normals := PackedVector3Array()
+	normals.resize(vertices.size())
+	normals.fill(Vector3.UP)
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = cells
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var stain := MeshInstance3D.new()
+	stain.mesh = mesh
+	stain.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var material := ShaderMaterial.new()
+	material.shader = KAMIKAZE_RESIDUE
+	stain.material_override = material
+	add_child(stain)
+	var fade := stain.create_tween()
+	if scorch:
+		if _scorches.size() >= SCORCH_LIMIT:
+			_scorches.pop_front().queue_free()
+		_scorches.append(stain)
+		material.set_shader_parameter(&"scorched", true)
+		material.set_shader_parameter(&"variation", randf())
+		material.set_shader_parameter(&"heat", 1.0)
+		material.set_shader_parameter(&"fade", 1.0)
+		fade.tween_method(func(value: float) -> void: material.set_shader_parameter(&"heat", value), 1.0, 0.0, 2.3)
+		fade.tween_interval(9.7)
+		fade.tween_method(func(value: float) -> void: material.set_shader_parameter(&"fade", value), 1.0, 0.0, 5.0)
+		fade.tween_callback(func() -> void:
+			_scorches.erase(stain)
+			stain.queue_free())
+	else:
+		fade.tween_method(func(value: float) -> void: material.set_shader_parameter(&"fade", value), 1.0, 0.0, 2.0).set_delay(4.3)
+		fade.tween_callback(stain.queue_free)
+
 func impact(point: Vector3, normal: Vector3) -> void:
 	_spark(_claim(0.035), point + normal * 0.047, AsterArt.AMBER, 0.11)
 
@@ -181,6 +358,17 @@ func _process(delta: float) -> void:
 		_time[slot] -= delta
 		if _time[slot] <= 0.0:
 			_hide(slot)
+
+	var camera := get_viewport().get_camera_3d()
+	for blast in _blasts:
+		if not blast.plate.visible:
+			continue
+		blast.age += delta
+		if blast.age >= BLAST_DURATION:
+			blast.plate.hide()
+			blast.light.hide()
+		else:
+			_update_blast(blast, camera)
 
 	for fume in _fumes:
 		if not fume.sprite.visible:

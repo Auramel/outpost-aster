@@ -18,17 +18,16 @@ var _objective: Label
 var _operator: Label
 var _weapon: Label
 var _rifle: Label
-var _cargo: Label
-var _warning: Label
 var _notice: Label
 var _context: Label
-var _service: ProgressBar
 var _overlay: ColorRect
 var _menu_title: Label
 var _menu_detail: Label
 var _menu_controls: Label
 var _sensitivity: HSlider
 var _sensitivity_caption: Label
+var _view_distance: HSlider
+var _view_distance_caption: Label
 var _resume: Button
 var _restart: Button
 var _main_menu: Button
@@ -52,7 +51,6 @@ func _ready() -> void:
 	var operator_panel := _card(Vector2(0, 1), Vector2(36, -139), 273, ACTIVE)
 	_label(operator_panel, "ЗДОРОВЬЕ", 15, ACTIVE)
 	_operator = _label(operator_panel, "", 31, INK)
-	_cargo = _label(operator_panel, "", 16, MUTED)
 	var rifle_panel := _card(Vector2(1, 1), Vector2(-306, -139), 270, ACTIVE)
 	_weapon = _label(rifle_panel, "", 16, ACTIVE)
 	_rifle = _label(rifle_panel, "", 32, INK)
@@ -60,17 +58,8 @@ func _ready() -> void:
 	_context = _label(hints, "", 20, INK)
 	_context.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_context.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_service = ProgressBar.new()
-	_service.custom_minimum_size.y = 7
-	_service.max_value = 1.0
-	_service.show_percentage = false
-	_service.add_theme_stylebox_override(&"background", _style(Color("#2c4054"), Color.TRANSPARENT, 0, 2))
-	_service.add_theme_stylebox_override(&"fill", _style(ACTIVE, Color.TRANSPARENT, 0, 2))
-	hints.add_child(_service)
 	var alerts := _card(Vector2(0.5, 0), Vector2(-308, 119), 616)
-	_warning = _label(alerts, "", 19, DANGER)
 	_notice = _label(alerts, "", 17, AMBER)
-	_warning.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_notice.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_make_overlay()
 	_tuning = AsterTuningPanel.new()
@@ -149,6 +138,18 @@ func _make_overlay() -> void:
 	_sensitivity.value = game.player.sensitivity
 	_sensitivity.value_changed.connect(_change_sensitivity)
 	options.add_child(_sensitivity)
+	_view_distance_caption = _label(options, "Дальность прорисовки   ·   %d м" % AsterSettings.view_distance, 20, MUTED)
+	_view_distance = HSlider.new()
+	_view_distance.min_value = AsterSettings.MIN_VIEW_DISTANCE
+	_view_distance.max_value = AsterSettings.MAX_VIEW_DISTANCE
+	_view_distance.step = AsterSettings.VIEW_DISTANCE_STEP
+	_view_distance.value = AsterSettings.view_distance
+	_view_distance.value_changed.connect(_change_view_distance)
+	_view_distance.drag_ended.connect(func(changed: bool) -> void:
+		if changed:
+			AsterSettings.save()
+	)
+	options.add_child(_view_distance)
 	_resume = _button(options, "Продолжить")
 	_resume.pressed.connect(func() -> void: game.set_paused(false))
 	_restart = _button(options, "Начать заново")
@@ -161,6 +162,11 @@ func _change_sensitivity(value: float) -> void:
 	game.player.sensitivity = value
 	AsterSettings.sensitivity = value
 	_sensitivity_caption.text = "Чувствительность мыши   ·   %d%%" % roundi(value / 0.00255 * 100.0)
+
+func _change_view_distance(value: float) -> void:
+	AsterSettings.view_distance = roundi(value)
+	game.apply_view_distance()
+	_view_distance_caption.text = "Дальность прорисовки   ·   %d м" % AsterSettings.view_distance
 
 func _button(parent: Control, text: String) -> Button:
 	var button := Button.new()
@@ -188,6 +194,8 @@ func show_pause(value: bool) -> void:
 		_menu_controls.show()
 		_sensitivity.show()
 		_sensitivity_caption.show()
+		_view_distance.show()
+		_view_distance_caption.show()
 		_resume.show()
 		_restart.hide()
 		_resume.grab_focus()
@@ -199,6 +207,8 @@ func show_loss() -> void:
 	_menu_controls.hide()
 	_sensitivity.hide()
 	_sensitivity_caption.hide()
+	_view_distance.hide()
+	_view_distance_caption.hide()
 	_resume.hide()
 	_restart.show()
 	_restart.grab_focus()
@@ -244,8 +254,6 @@ func _update() -> void:
 	_score.text = str(game.combat_points)
 	_operator.text = "%03d   ·   %d ВОЗВР." % [ceili(player.hp), game.points]
 	_operator.add_theme_color_override(&"font_color", DANGER if player.hp <= game.balance.player_hp * 0.30 else INK)
-	_cargo.visible = player.carrying
-	_cargo.text = "ЯЩИК   ·   СКОРОСТЬ %d%%" % roundi(player.move_speed() / game.balance.player_speed * 100.0)
 	_weapon.text = "01  /  АВТОМАТ" if player.tool == 1 else "02  /  РЕМКОМПЛЕКТ"
 	_rifle.visible = player.tool == 1
 	_rifle.text = "%02d   /   %03d" % [player.magazine, player.reserve]
@@ -253,16 +261,10 @@ func _update() -> void:
 		_weapon.text = "ПЕРЕЗАРЯДКА   ·   %.1f С" % player.reload_left
 	_rifle.add_theme_color_override(&"font_color", AMBER if player.magazine <= 6 else INK)
 	_context.text = _local_context(player)
-	var replaced := player.interaction.stage != &"" and player.alive
-	_service.visible = replaced
-	if replaced:
-		_service.value = player.interaction.elapsed / player.interaction.duration
 	_context.get_parent().get_parent().visible = not _context.text.is_empty()
-	_warning.text = "Ворота бункера атакуют" if game.core.attacked > 0.0 else ""
 	_notice.text = game.message if game.message_left > 0.0 else ""
-	_warning.visible = not _warning.text.is_empty()
 	_notice.visible = not _notice.text.is_empty()
-	_warning.get_parent().get_parent().visible = _warning.visible or _notice.visible
+	_notice.get_parent().get_parent().visible = _notice.visible
 
 func _time_label(seconds: float) -> String:
 	var whole := floori(seconds)
@@ -274,13 +276,9 @@ func _local_context(player: AsterPlayer) -> String:
 	if not player.alive:
 		return "Возрождение через %.1f с" % game.respawn_left
 	var interaction := player.interaction
-	if interaction.stage != &"":
-		var action := "1/2  ·  Снятие старого ящика" if interaction.stage == &"remove" else "2/2  ·  Установка ящика"
-		return "%s   %s   ·   %.1f с\nУдерживайте E" % [interaction.station.title, action, maxf(0.0, interaction.duration - interaction.elapsed)]
 	var target := interaction.aimed
-	if target is AsterStructure or target is AsterTurret:
-		if target.hp < target.max_hp and (player.tool == 2 or target != interaction.usable):
-			return target.repair_hint()
+	if player.tool == 2 and (target is AsterStructure or target is AsterTurret):
+		return "ЛКМ · Ремонт"
 	return interaction.action_hint()
 
 func _draw() -> void:

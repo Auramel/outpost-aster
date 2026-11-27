@@ -69,6 +69,11 @@ func impact(point: Vector3) -> void:
 		_impact_delay = 0.043
 		_emit(point + Vector3.UP * 0.22, _rng.randf_range(0.62, 0.97), 0.64, 0.90, true)
 
+func artillery(point: Vector3) -> void:
+	for index in range(5):
+		var offset := Vector3(cos(index * TAU / 5), 0.38, sin(index * TAU / 5)) * 1.14
+		_emit(point + offset, 2.2 + index * 0.23, 0.69, 1.7 + index * 0.16, true)
+
 func defeated(point: Vector3) -> void:
 	_emit(point + Vector3.UP * 0.41, 1.22, 0.61, 1.51, true)
 	_emit(point + Vector3(-0.36, 0.21, 0.42), 0.89, 0.47, 1.08, true)

@@ -24,7 +24,6 @@ var hp: float
 var magazine: int
 var reserve: int
 var alive := true
-var carrying := false
 var tool := 1
 var sensitivity := 0.00255
 var aim_amount := 0.0
@@ -54,6 +53,8 @@ var _shot_timer := 0.0
 var _repair_beep := 0.0
 var _recoil := 0.0
 var _view_kick := 0.0
+var _jolt := 0.0
+var _jolt_phase := 0.0
 var _walk_phase := 0.0
 var _step_remaining := 0.70
 var _firing_visual := 0.0
@@ -62,7 +63,7 @@ func setup(game: Node, spawn: Vector3) -> void:
 	_game = game
 	_balance = game.balance
 	collision_layer = AsterArt.PLAYER
-	collision_mask = AsterArt.SOLID | AsterArt.ACCESS
+	collision_mask = AsterArt.SOLID | AsterArt.ACCESS | AsterArt.TANK
 	floor_snap_length = 0.45
 	_stand_shape.radius = BODY_RADIUS
 	_stand_shape.height = STAND_HEIGHT
@@ -75,7 +76,6 @@ func setup(game: Node, spawn: Vector3) -> void:
 	eye.position.y = STAND_EYE
 	eye.fov = _balance.hip_fov
 	eye.near = 0.055
-	eye.far = 186.0
 	add_child(eye)
 	eye.make_current()
 	eye.add_child(_weapon_slot)
@@ -123,16 +123,9 @@ func look(relative: Vector2) -> void:
 	rotate_y(-relative.x * scale)
 	eye.rotation.x = clampf(eye.rotation.x - relative.y * scale, -1.51, 1.51)
 
-func take_box() -> bool:
-	if not alive or carrying:
-		return false
-	carrying = true
-	return true
-
 func move_speed() -> float:
-	var cargo_factor := _balance.cargo_speed_factor if carrying else 1.0
 	var stance_factor := _balance.crouch_speed_factor if crouching else (_balance.sprint_speed_factor if sprinting else 1.0)
-	return _balance.player_speed * cargo_factor * stance_factor * lerpf(1.0, _balance.aim_speed_factor, aim_amount)
+	return _balance.player_speed * stance_factor * lerpf(1.0, _balance.aim_speed_factor, aim_amount)
 
 func _physics_process(delta: float) -> void:
 	if not alive or not input_enabled or _game.lost:
@@ -158,6 +151,10 @@ func _physics_process(delta: float) -> void:
 	_flash_light.visible = _gun_flash.visible
 	_recoil = move_toward(_recoil, 0.0, delta * 0.64)
 	_set_view_kick(move_toward(_view_kick, 0.0, delta * 0.24))
+	_jolt = move_toward(_jolt, 0.0, delta * 0.12)
+	_jolt_phase += delta * 54.0
+	eye.h_offset = _jolt * cos(_jolt_phase * 1.53) * 0.63
+	eye.v_offset = _jolt * sin(_jolt_phase)
 	_walk_phase += delta * AsterArt.horizontal(velocity).length() * 1.25
 	if global_position.distance_to(_game.supply.global_position) < 3.15:
 		reserve = _balance.rifle_reserve
@@ -170,11 +167,10 @@ func _physics_process(delta: float) -> void:
 		return
 	if reload_left > 0.0:
 		_advance_reload(delta)
-	var servicing := interaction.stage != &""
-	if not servicing and Input.is_action_just_pressed(&"reload") and tool == 1:
+	if Input.is_action_just_pressed(&"reload") and tool == 1:
 		reload_rifle()
-	_update_aim(delta, tool == 1 and not servicing and reload_left <= 0.0 and Input.is_action_pressed(&"aim"))
-	if not servicing and Input.is_action_pressed(&"fire"):
+	_update_aim(delta, tool == 1 and reload_left <= 0.0 and Input.is_action_pressed(&"aim"))
+	if Input.is_action_pressed(&"fire"):
 		if tool == 1:
 			fire_rifle()
 		else:
@@ -201,7 +197,7 @@ func _update_stance(delta: float, axis: Vector2) -> void:
 		_set_stance(true)
 	elif crouching and not wants_crouch and _can_stand():
 		_set_stance(false)
-	sprinting = Input.is_action_pressed(&"sprint") and axis.y < -0.15 and not crouching and aim_amount < 0.05 and not Input.is_action_pressed(&"aim") and not Input.is_action_pressed(&"fire") and interaction.stage == &""
+	sprinting = Input.is_action_pressed(&"sprint") and axis.y < -0.15 and not crouching and aim_amount < 0.05 and not Input.is_action_pressed(&"aim") and not Input.is_action_pressed(&"fire")
 	_sprint_blend = move_toward(_sprint_blend, 1.0 if sprinting else 0.0, delta * 7.0)
 	eye.position.y = move_toward(eye.position.y, CROUCH_EYE if crouching else STAND_EYE, delta * 5.0)
 
@@ -254,8 +250,16 @@ func _set_view_kick(value: float) -> void:
 	eye.rotation.x = clampf(resting_pitch + value, -1.51, 1.51)
 	_view_kick = eye.rotation.x - resting_pitch
 
+func artillery_jolt(origin: Vector3) -> void:
+	var strength := 1.0 - smoothstep(5.0, 68.0, global_position.distance_to(origin))
+	_jolt = maxf(_jolt, strength * 0.108)
+	_jolt_phase = 0.0
+
 func clear_aim() -> void:
 	_set_view_kick(0.0)
+	_jolt = 0.0
+	eye.h_offset = 0.0
+	eye.v_offset = 0.0
 	_recoil = 0.0
 	sprinting = false
 	_sprint_blend = 0.0
@@ -293,7 +297,7 @@ func _advance_reload(delta: float) -> void:
 		reserve -= amount
 
 func fire_rifle() -> void:
-	if interaction.stage != &"" or _shot_timer > 0.0 or reload_left > 0.0:
+	if _shot_timer > 0.0 or reload_left > 0.0:
 		return
 	if magazine == 0:
 		reload_rifle()
@@ -329,8 +333,6 @@ func fire_rifle() -> void:
 	_set_view_kick(minf(_view_kick + lerpf(0.022, 0.015, aim_amount) * kick_scale, 0.046 * kick_scale))
 
 func repair_target(delta: float) -> void:
-	if interaction.stage != &"":
-		return
 	interaction.refresh()
 	var target := interaction.aimed
 	if target is AsterStructure or target is AsterTurret:
@@ -347,8 +349,6 @@ func damage(amount: float) -> void:
 	damage_flash = 0.77
 	if hp == 0.0:
 		alive = false
-		carrying = false
-		interaction.cancel()
 		clear_aim()
 		reload_left = 0.0
 		remove_from_group(&"wall_occupants")
@@ -368,7 +368,6 @@ func respawn(spawn: Vector3) -> void:
 	magazine = _balance.rifle_magazine
 	reserve = _balance.rifle_reserve
 	alive = true
-	carrying = false
 	reload_left = 0.0
 	_step_remaining = 0.70
 	_shot_timer = 0.0

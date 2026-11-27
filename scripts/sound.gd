@@ -19,16 +19,12 @@ const PROFILES := {
 	&"hit": [0.085, 370.0, 112.0, 0.42, -17.0],
 	&"empty": [0.052, 320.0, 153.0, 0.58, -18.0],
 	&"repair": [0.097, 601.0, 780.0, 0.14, -23.0],
-	&"crate": [0.16, 210.0, 77.0, 0.49, -16.0],
 	&"lock": [0.24, 277.0, 528.0, 0.24, -14.0],
 }
 const MECHANICAL := {
 	&"rifle_reload_grip": [0.15, -13.0, [Vector3(0.0, 390.0, 0.38), Vector3(0.049, 710.0, 0.65)]],
 	&"rifle_reload_remove": [0.22, -10.0, [Vector3(0.0, 528.0, 0.72), Vector3(0.068, 288.0, 0.78)]],
 	&"rifle_reload_seat": [0.24, -8.0, [Vector3(0.0, 354.0, 0.78), Vector3(0.092, 862.0, 0.59)]],
-	&"turret_unlatch": [0.30, -10.0, [Vector3(0.0, 242.0, 0.53), Vector3(0.12, 167.0, 0.86)]],
-	&"turret_remove": [0.34, -10.0, [Vector3(0.0, 153.0, 0.96), Vector3(0.13, 315.0, 0.56)]],
-	&"turret_insert": [0.30, -10.0, [Vector3(0.0, 181.0, 0.76), Vector3(0.106, 292.0, 0.61)]],
 	&"turret_seat": [0.42, -8.0, [Vector3(0.0, 132.0, 1.0), Vector3(0.077, 482.0, 0.75), Vector3(0.21, 204.0, 0.42)]],
 }
 var _clips: Dictionary = {}
@@ -53,6 +49,9 @@ var _turret_voices: Array[AudioStreamPlayer3D] = []
 var _rifle_voices: Array[AudioStreamPlayer] = []
 var _next_turret := 0
 var _next_rifle := 0
+
+static var _artillery_wave: AudioStreamWAV
+static var _gauss_wave: AudioStreamWAV
 
 func _ready() -> void:
 	for kind: StringName in PROFILES:
@@ -152,13 +151,68 @@ func _play_local(clip: AudioStreamWAV, volume_db: float) -> void:
 	voice.volume_db = volume_db
 	voice.play()
 
-func fire_at(heavy: bool, origin: Vector3) -> void:
+func artillery(origin: Vector3, pitch := 1.0) -> void:
+	if _turret_voices.is_empty():
+		return
+	var voice := _turret_voices[_next_turret]
+	_next_turret = (_next_turret + 1) % _turret_voices.size()
+	if _artillery_wave == null:
+		var samples := PackedByteArray()
+		samples.resize(24000 * 2)
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 160175
+		var filtered := 0.0
+		for index in range(24000):
+			var time := float(index) / SAMPLE_RATE
+			filtered = lerpf(filtered, rng.randf_range(-1.0, 1.0), 0.087)
+			var thump := sin(TAU * (55.0 * time + 3.3 * (1.0 - exp(-12.0 * time)))) * exp(-7.8 * time)
+			var blast := filtered * exp(-4.35 * time) * 2.4 + rng.randf_range(-1.0, 1.0) * exp(-38.0 * time) * 0.58
+			samples.encode_s16(index * 2, roundi(clampf(thump * 0.63 + blast, -1.0, 1.0) * 30000.0))
+		_artillery_wave = _wave(samples)
+	voice.global_position = origin
+	voice.pitch_scale = pitch
+	voice.stream = _artillery_wave
+	voice.play()
+
+func gauss(origin: Vector3) -> void:
+	if _gauss_wave == null:
+		_gauss_wave = _gauss_clip()
+	var voice := _turret_voices[_next_turret]
+	_next_turret = (_next_turret + 1) % _turret_voices.size()
+	voice.global_position = origin
+	voice.pitch_scale = 1.0
+	voice.stream = _gauss_wave
+	voice.play()
+
+func _gauss_clip() -> AudioStreamWAV:
+	var count := int(SAMPLE_RATE * 0.52)
+	var samples := PackedByteArray()
+	samples.resize(count * 2)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2317
+	var filtered := 0.0
+	for index in range(count):
+		var time := float(index) / SAMPLE_RATE
+		var noise := rng.randf_range(-1.0, 1.0)
+		filtered = lerpf(filtered, noise, 0.20)
+		var attack := smoothstep(0.0, 0.003, time)
+		var crack := (noise - filtered) * exp(-time * 118.0) * 0.61
+		var pulse := sin(TAU * (67.0 * time + 4.2 * (1.0 - exp(-time * 28.0)))) * exp(-time * 20.0)
+		var sweep := 510.0 * time + 51.0 * (1.0 - exp(-time * 31.0))
+		var discharge := (sin(TAU * sweep) + 0.31 * sin(TAU * sweep * 1.49)) * exp(-time * 14.0)
+		var ring := sin(TAU * (906.0 * time + 0.32 * sin(TAU * 31.0 * time))) * exp(-time * 9.4)
+		var sample := attack * (crack + pulse * 0.53 + discharge * 0.37 + ring * 0.14 + filtered * exp(-time * 7.1) * 0.17)
+		samples.encode_s16(index * 2, roundi(clampf(sample, -1.0, 1.0) * 31000.0))
+	return _wave(samples)
+
+func fire_at(heavy: bool, origin: Vector3, pitch := 1.0) -> void:
 	if _rifle_voices.is_empty():
 		return
 	if heavy:
 		var voice := _turret_voices[_next_turret]
 		_next_turret = (_next_turret + 1) % _turret_voices.size()
 		voice.global_position = origin
+		voice.pitch_scale = pitch
 		voice.stream = _turret_clips[randi() % _turret_clips.size()]
 		voice.play()
 	else:

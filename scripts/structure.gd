@@ -22,9 +22,7 @@ var gate_open := false
 var blocking := true
 var outward := Vector3.ZERO
 var ceiling := WALL_HEIGHT
-var attacked := 0.0
 var support
-var status_tag: AsterStatusTag
 var _balance: AsterBalance
 var _solid: CollisionObject3D
 var _body_visual := Node3D.new()
@@ -53,11 +51,15 @@ func setup(settings: AsterBalance, label: String, direction: Vector3 = Vector3.Z
 	else:
 		_build_wall()
 	_damage_stages = AsterWallDamage.build(_damage_visual, is_gate or is_core)
-	status_tag = AsterStatusTag.new()
-	add_child(status_tag)
-	var caption := title.trim_prefix("Секция ").to_upper()
-	status_tag.setup(caption)
+	if not is_core:
+		_build_lanterns()
 	_refresh()
+
+func _build_lanterns() -> void:
+	for side: float in [-1, 1]:
+		var face := (0.51 if side > 0 else -3.45) if not is_gate else (0.60 if side > 0 else -3.4)
+		var at := Vector3(-0.62 if is_gate else 0.0, 2.57, face + side * 0.09)
+		AsterTerrain.floodlight(_body_visual if not is_gate else self, at, at + Vector3(0, -2.4, side * 3.9), 2.65, 13.0, 50.0, 0.43)
 
 func _build_wall() -> void:
 	var size := Vector3(WALL_LENGTH + 0.025, WALL_HEIGHT, WALL_DEPTH)
@@ -112,10 +114,17 @@ func _build_core() -> void:
 	for side: float in [-1.0, 1.0]:
 		AsterArt.box(self, Vector3(0.105, 0.48, 0.04), Vector3(side * 2.62, 2.62, 0.61), AsterArt.AMBER, true)
 
+func closest_point(point: Vector3) -> Vector3:
+	var local := to_local(point)
+	var half_width := CORE_HALF.x if is_core else WALL_LENGTH * 0.5
+	var half_depth := CORE_HALF.z if is_core else (GATE_PANEL_DEPTH if is_gate else WALL_DEPTH) * 0.5
+	var center := 0.0 if is_gate or is_core else WALL_CENTER
+	return to_global(Vector3(clampf(local.x, -half_width, half_width), clampf(local.y, 0.0, ceiling),
+		clampf(local.z, center - half_depth, center + half_depth)))
+
 func damage(amount: float) -> void:
 	if hp <= 0.0:
 		return
-	attacked = 1.25
 	hp = maxf(0.0, hp - amount)
 	if hp == 0.0:
 		gate_open = false
@@ -132,8 +141,7 @@ func repair(amount: float) -> bool:
 	_refresh()
 	return true
 
-func tick(delta: float) -> void:
-	attacked = maxf(0.0, attacked - delta)
+func tick(_delta: float) -> void:
 	if not is_core and not gate_open and not blocking and hp >= max_hp * _balance.wall_collision_fraction and _volume_clear():
 		_set_blocking(true)
 		_refresh()
@@ -155,21 +163,6 @@ func _set_blocking(value: bool) -> void:
 			merlon.set_deferred(&"collision_layer", AsterArt.ACCESS if value else 0)
 
 func _refresh() -> void:
-	var tag_y := WALL_HEIGHT + 0.41
-	var warning := ""
-	if hp <= 0.0:
-		warning = "РАЗРУШЕНО" if is_core else "ПРОЛОМ"
-	if is_core:
-		tag_y = 4.94
-		status_tag.position.z = 2.14
-	elif is_gate:
-		tag_y = 4.10
-		if gate_open:
-			warning = "ОТКРЫТЫ"
-	elif not blocking:
-		tag_y = 0.95
-	status_tag.position.y = tag_y
-	status_tag.set_values(hp / max_hp, 0.0, warning)
 	_body_visual.visible = blocking
 	_rubble.visible = not blocking and not gate_open
 	var fraction := hp / max_hp
@@ -198,19 +191,3 @@ func toggle_gate() -> bool:
 	_set_blocking(not gate_open)
 	_refresh()
 	return true
-
-func gate_hint() -> String:
-	if gate_open:
-		return "E · Закрыть ворота"
-	if blocking:
-		return "E · Открыть ворота"
-	return repair_hint()
-
-func repair_hint() -> String:
-	if hp >= max_hp:
-		return "Прочность полная"
-	if not is_core and not blocking:
-		if hp >= max_hp * _balance.wall_collision_fraction:
-			return "Освободите секцию для возврата коллизии"
-		return "2 · Ремкомплект   ЛКМ · Восстановить ворота" if is_gate else "2 · Ремкомплект   ЛКМ · Восстановить секцию"
-	return "2 · Ремкомплект   ЛКМ · Ремонт"

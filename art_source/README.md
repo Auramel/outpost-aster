@@ -2,11 +2,13 @@
 
 Меши наземного жука и летуна запекаются из `build_models.py`. Команда `python3 art_source/bake_chitin.py` запекает карты цвета и нормалей хитина и полупрозрачную текстуру крыльев.
 
+Команда `python3 art_source/build_special_beetles.py` запекает меши шести спецжуков и карты шероховатости и затенения их хитина. Концепты спецжуков лежат в `references/special_beetles`.
+
 В игре используются оригинальные модели glTF из `assets/art/models` и материалы из `assets/art/materials`. Геометрия оружия, базы, турелей и жуков собрана специально для проекта. Импортированные меши используются как визуальные узлы над существующей физикой, а модель каждой турели разделена на основание, поворотный блок и наклоняемое оружие. В Godot включены упрощённые уровни детализации мешей. Для фактур используются карты нормалей, мип-уровни и VRAM-сжатие.
 
 Карабин собран из корпуса со сквозным прикладом и открытым прицелом, съёмного магазина и двух отдельных рук. Верхняя и нижняя части цевья разнесены и оставляют видимым кожух ствола. Для корпуса используются карты сатинированной стали и полимера, для меток и прицела применяется холодное свечение. У турели отдельные меши для кольцевой опоры, поворотной брони с сенсорами, двухствольной каретки, сменной кассеты и обломков. Корпус покрыт потёртой эмалью, а каретка откатывается при стрельбе. У жука отдельные меши для опорных лап, хватательных конечностей и двух частей хвоста.
 
-`python3 art_source/build_models.py` повторно собирает модели. Скрипт `art_source/bake_textures.gd` запекает атласы материалов и дневную панораму. Для запекания текстур каньона передайте исходный атлас:
+`python3 art_source/build_models.py` повторно собирает базовые модели. Команда `python3 art_source/build_fortifications.py` запекает фасад, консольный выступ для Т-2, госпиталь, детали Т-5 «Дредноут», открытые ящики, слои патронов, повреждения Т-1 и гнёзда. Команда `python3 art_source/build_turret_family.py` пересобирает меши основания, поворотного блока и оружия для Т-2, Т-3 и Т-4. Скрипт `art_source/bake_textures.gd` запекает атласы материалов и дневную панораму. Для запекания текстур каньона передайте исходный атлас:
 
 ```sh
 "/Applications/Godot.app/Contents/MacOS/Godot" --headless --path . \
@@ -39,3 +41,7 @@
 Атлас создан встроенным ImageGen. Запекание через `bake_textures.gd -- --workshop-atlas /путь/к/атласу.png` создаёт цветовые карты, нормали и шероховатость для материалов `parkerized`, `painted`, `polymer` и `armory`. Карты сохраняются в `assets/art/materials`.
 
 > Use case: photorealistic-natural. Asset type: production albedo texture atlas for an original grounded post-apocalyptic science fiction first-person game, used at arm's length. Perfect 2x2 grid with edges meeting at the exact center. Each tile is a continuous 100 percent full-bleed flat orthographic material surface photographed with even cross-polarized light. Top-left: charcoal blue-black parkerized bare steel typical of decades-old industrial machinery, fine gray metal grain, many very fine directionally consistent marks, short silver abrasion gouges, clusters of handling wear and subtle brown oxidation around scratches. Top-right: worn, subdued green-grey painted metal. Mostly intact matte olive-drab coating with small irregular metallic chips that reveal faint cold gray substrate, powdery ochre dirt in scuffs, moderate wear coverage 15 to 25 percent, no panel edges. Bottom-left: dark gray textured engineering polymer with dense tactile stipple, short rub marks, patchy desaturated hand grime, tiny dust trapped in the texture, no repeating stamped shape. Bottom-right: ageing light-to-medium olive-gray concrete armory wall with visible pores, sooty muted damp streaks and patches of embedded sand, very restrained rusty bleed, no wall geometry or seams. Worn, analog, hand-used realism, neutral dark values, physically plausible colors for repeatable PBR textures. Fine and medium scale texture with no camera perspective. No lighting falloff, objects, borders, weapons, assembled props, lettering, layout marks, cast shadows, logo, tiles within a quadrant, or background.
+
+## Фотограмметрия
+
+Модель [Rock Face 02](https://polyhaven.com/a/rock_face_02) от Dario Barresi и Rico Cilliers взята из Poly Haven под [CC0](https://polyhaven.com/license). В `assets/art/models/rock_face_02.glb` упакованы исходный меш и карты цвета, нормалей, шероховатости и AO в разрешении 1K. Godot импортирует текстуры в Basis Universal и генерирует LOD.

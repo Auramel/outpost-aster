@@ -7,6 +7,7 @@ const TARGET := 4
 const ACCESS := 8
 const PLAYER := 16
 const SPAWN_SCREEN := 32
+const TANK := 64
 const CONCRETE := Color("#686f70")
 const METAL := Color("#353f4a")
 const DARK := Color("#19242e")
@@ -110,6 +111,9 @@ static func ray(world: World3D, from: Vector3, to: Vector3, mask: int, areas: bo
 	var query := PhysicsRayQueryParameters3D.create(from, to, mask)
 	query.collide_with_areas = areas
 	return world.direct_space_state.intersect_ray(query)
+
+static func hit_target(collider: CollisionObject3D) -> Node:
+	return collider.get_meta(&"target") if collider.has_meta(&"target") else null
 
 static func horizontal(vector: Vector3) -> Vector3:
 	return Vector3(vector.x, 0.0, vector.z)

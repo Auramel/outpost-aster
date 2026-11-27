@@ -6,7 +6,6 @@ extends Resource
 @export var player_speed: float = 6.3
 @export var sprint_speed_factor: float = 1.54
 @export var crouch_speed_factor: float = 0.56
-@export var cargo_speed_factor: float = 0.70
 @export var jump_speed: float = 5.5
 @export var rifle_magazine: int = 100
 @export var rifle_reserve: int = 500
@@ -21,6 +20,7 @@ extends Resource
 @export var repair_range: float = 4.1
 @export var repair_rate: float = 29.0
 @export var use_range: float = 3.25
+@export var hospital_heal_rate: float = 15.0
 
 @export_group("База")
 @export var wall_hp: float = 220.0
@@ -33,8 +33,6 @@ extends Resource
 @export var turret_damage: float = 14.0
 @export var turret_range: float = 38.0
 @export var turret_turn_speed: float = 5.2
-@export var remove_duration: float = 2.0
-@export var insert_duration: float = 3.0
 
 @export_group("Тюнинг")
 @export var rate_gain: float = 27.6
@@ -64,12 +62,47 @@ extends Resource
 @export var flyer_speed: float = 7.6
 @export var flyer_damage: float = 18.0
 @export var bug_attack_period: float = 0.88
-@export_range(1, 120) var active_limit: int = 120
-@export_range(1, 120) var assault_opening_population: int = 9
+@export_range(1, 80) var active_limit: int = 80
+@export_range(1, 80) var assault_opening_population: int = 9
 @export var assault_ramp_time: float = 300.0
 @export var assault_opening_interval: float = 1.30
-@export var assault_peak_interval: float = 0.44
+@export var assault_peak_interval: float = 1.0
+@export var assault_clear_delay: float = 2.0
 @export var combat_points_per_kill: int = 15
+
+@export_group("Спецжуки")
+@export var special_start: float = 45.0
+@export var special_ramp_time: float = 660.0
+@export_range(0.0, 1.0) var special_peak_chance: float = 0.19
+@export var tank_start: float = 285.0
+@export var tank_hp: float = 650.0
+@export var tank_armor: float = 0.46
+@export var tank_speed: float = 2.1
+@export var tank_damage: float = 9.0
+@export var catapult_hp: float = 185.0
+@export var catapult_armor: float = 0.14
+@export var catapult_speed: float = 3.4
+@export var catapult_damage: float = 29.0
+@export var catapult_range: float = 46.0
+@export var catapult_radius: float = 4.0
+@export var catapult_period: float = 7.5
+@export var kamikaze_hp: float = 48.0
+@export var kamikaze_speed: float = 12.4
+@export var kamikaze_damage: float = 60.0
+@export var kamikaze_radius: float = 3.5
+@export var transporter_hp: float = 250.0
+@export var transporter_armor: float = 0.15
+@export var transporter_speed: float = 8.0
+@export var ram_hp: float = 315.0
+@export var ram_armor: float = 0.30
+@export var ram_speed: float = 3.2
+@export var ram_charge_speed: float = 10.2
+@export var ram_damage: float = 54.0
+@export var shooter_hp: float = 162.0
+@export var shooter_armor: float = 0.13
+@export var shooter_range: float = 18.0
+@export var shooter_damage: float = 15.0
+@export var shooter_period: float = 2.1
 
 @export_group("Партия")
 @export var respawn_points: int = 5

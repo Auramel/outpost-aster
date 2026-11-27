@@ -78,7 +78,7 @@ func _measure() -> void:
 	print("ASTER RENDER ", root.get_texture().get_size(), " | active=", game.assault.enemies.size(), " | frames=", frame_count, " | seconds=", total, " | fps=", frame_count / total, " | p95_ms=", times[floori(frame_count * 0.95) - 1], " | p99_ms=", times[floori(frame_count * 0.99) - 1], " | worst_ms=", times[frame_count - 1])
 	if "--capture-tuning" in arguments:
 		game.combat_points = 500
-		player.global_position = game.rifle_terminal.global_position + Vector3.BACK * 1.9
+		player.global_position = game.tuning_terminal.global_position + Vector3.BACK * 1.9
 		game.set_tuning(true, true)
 		await _capture("aster-rifle-tuning")
 		game.set_tuning(false)

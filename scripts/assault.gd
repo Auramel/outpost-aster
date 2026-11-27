@@ -3,8 +3,7 @@ extends Node
 
 signal bug_defeated(position: Vector3)
 
-const GROUND_CAP := 120
-const SPAWN_Z := AsterTerrain.SCREEN_Z + 4.5
+const GROUND_CAP := 80
 const MIN_SPAWN_DISTANCE := 13.0
 const SPACING := 1.68
 const CELL_SIZE := 2.0
@@ -13,29 +12,26 @@ const ENTRY_FLOOR_NORMAL := 0.74
 const GROUND_SCREEN_OFFSETS: Array[Vector3] = [
 	Vector3.ZERO, Vector3(-0.66, 1.16, 0), Vector3(0.66, 1.16, 0), Vector3(0, 1.16, -0.78),
 ]
-const FLYER_SCREEN_OFFSETS: Array[Vector3] = [
-	Vector3.ZERO, Vector3(0, -0.52, 1.0), Vector3(0, 0.84, -0.90),
-	Vector3(-2.62, 2.04, 0.82), Vector3(2.62, 2.04, 0.82),
-	Vector3(-1.95, 2.93, 0.40), Vector3(1.95, 2.93, 0.40),
-]
 
 var elapsed := 0.0
 var enemies: Array[AsterBug] = []
 var flyer_count := 0
 var _timer := 0.65
-var _flyer_timer := 0.65
 var _grid_timer := 0.0
 var _cells: Dictionary = {}
 var _game: Node
 var _balance: AsterBalance
 var _rng := RandomNumberGenerator.new()
 var _flyer_rng := RandomNumberGenerator.new()
+var _special_rng := RandomNumberGenerator.new()
+var _cave_routes: Array[PackedVector3Array] = []
 
 func setup(game: Node) -> void:
 	_game = game
 	_balance = game.balance
 	_rng.randomize()
 	_flyer_rng.randomize()
+	_special_rng.randomize()
 
 func ground_cap() -> int:
 	return clampi(_balance.active_limit, 1, GROUND_CAP)
@@ -63,41 +59,64 @@ func _physics_process(delta: float) -> void:
 	if _grid_timer <= 0.0:
 		_grid_timer = 0.085
 		_rebuild_grid()
-	_timer = _advance_wave(_timer, delta, false)
-	_flyer_timer = _advance_wave(_flyer_timer, delta, true)
+	_timer = maxf(0.0, _timer - delta)
+	if _timer > 0.0:
+		return
+	var ground_spawned := _spawn_wave(false)
+	var flyers_spawned := _spawn_wave(true)
+	_timer = spawn_interval() if ground_spawned or flyers_spawned else 0.23
 
-func _advance_wave(timer: float, delta: float, flying: bool) -> float:
-	timer = maxf(0.0, timer - delta)
-	if timer > 0.0:
-		return timer
+func _spawn_wave(flying: bool) -> bool:
 	var cap := flyer_cap() if flying else ground_cap()
 	var count := flyer_count if flying else enemies.size() - flyer_count
 	var slots := target_population(cap) - count
 	if slots <= 0:
-		return 0.0
+		return false
 	var rng := _flyer_rng if flying else _rng
-	var packet := 1 + roundi(pressure() * 3.0)
+	var packet := 1 + roundi(pressure() * 6.0)
 	var wave := mini(slots, rng.randi_range(maxi(1, packet - 1), packet + 1))
-	var spawned := _spawn_flyers(wave) if flying else _spawn_ground(wave)
-	return spawn_interval() * rng.randf_range(0.77, 1.23) if spawned else 0.23
+	return _spawn_flyers(wave) if flying else _spawn_ground(wave)
 
 func _spawn_ground(count: int) -> bool:
 	var routes := _scatter(count)
 	for path in routes:
 		var offset := Vector2(_rng.randf_range(-1.12, 1.12), _rng.randf_range(0.0, 0.77))
-		var bug := spawn_enemy(path[0], AsterBug.Kind.GROUND, offset)
+		var bug := spawn_enemy(path[0], _wave_kind(false), offset)
 		if bug != null:
 			bug.set_entry_path(path.slice(1))
 			bug.speed_factor = _rng.randf_range(0.91, 1.12)
 	return not routes.is_empty()
 
+func _wave_kind(flying: bool) -> AsterBug.Kind:
+	var progress := smoothstep(_balance.special_start, maxf(_balance.special_start + 1.0, _balance.special_ramp_time), elapsed)
+	if progress <= 0.0 or _special_rng.randf() >= _balance.special_peak_chance * progress:
+		return AsterBug.Kind.FLYER if flying else AsterBug.Kind.GROUND
+	if flying:
+		return AsterBug.Kind.KAMIKAZE if _special_rng.randf() < 0.57 else AsterBug.Kind.TRANSPORTER
+	var tank_weight := smoothstep(_balance.tank_start, _balance.tank_start + 105.0, elapsed) * 0.62
+	var roll := _special_rng.randf() * (3.0 + tank_weight)
+	if roll < 1.0:
+		return AsterBug.Kind.SHOOTER
+	if roll < 2.0:
+		return AsterBug.Kind.RAM
+	return AsterBug.Kind.CATAPULT if roll < 3.0 else AsterBug.Kind.TANK
+
 func spawn_enemy(point: Vector3, kind: AsterBug.Kind = AsterBug.Kind.GROUND, formation_offset := Vector2.ZERO) -> AsterBug:
-	var flying := kind == AsterBug.Kind.FLYER
+	var flying := kind in [AsterBug.Kind.FLYER, AsterBug.Kind.KAMIKAZE, AsterBug.Kind.TRANSPORTER]
 	var count := flyer_count if flying else enemies.size() - flyer_count
 	var cap := flyer_cap() if flying else ground_cap()
 	if count >= cap:
 		return null
-	var bug: AsterBug = AsterFlyingBug.new() if flying else AsterBug.new()
+	var bug: AsterBug
+	match kind:
+		AsterBug.Kind.GROUND, AsterBug.Kind.CLIMBER:
+			bug = AsterBug.new()
+		AsterBug.Kind.FLYER:
+			bug = AsterFlyingBug.new()
+		AsterBug.Kind.KAMIKAZE, AsterBug.Kind.TRANSPORTER:
+			bug = AsterSpecialFlyer.new()
+		_:
+			bug = AsterSpecialBug.new()
 	_game.add_child(bug)
 	point.y = maxf(point.y, AsterTerrain.surface_height(point.x, point.z) + (0.67 if flying else 0.025))
 	bug.global_position = point
@@ -109,29 +128,21 @@ func spawn_enemy(point: Vector3, kind: AsterBug.Kind = AsterBug.Kind.GROUND, for
 	return bug
 
 func _spawn_flyers(count: int) -> bool:
-	var player: AsterPlayer = _game.player
-	if not player.alive:
-		return false
-	var eye := player.eye.global_position
-	var world := player.get_world_3d()
-	var sites := AsterTerrain.SCREEN_SITES
-	var first := _flyer_rng.randi_range(0, sites.size() - 1)
+	var nests: PackedVector3Array = _game.nests
+	var first := _flyer_rng.randi_range(0, nests.size() - 1)
 	var spawned := 0
-	for attempt in range(sites.size() * 4 + count * 3):
-		var site: Vector2 = sites[(first + attempt) % sites.size()]
-		var away := (site - Vector2(eye.x, eye.z)).normalized()
-		if away.is_zero_approx():
-			away = Vector2.DOWN
-		var lateral := Vector2(-away.y, away.x)
-		var at := site + away * _flyer_rng.randf_range(6.0, 12.8) + lateral * _flyer_rng.randf_range(-4.0, 4.0)
-		var point := Vector3(at.x, AsterTerrain.surface_height(at.x, at.y) + 0.82, at.y)
-		if _clear_of_swarm(point, []) and _is_screened(world, eye, point, FLYER_SCREEN_OFFSETS):
-			var flyer := spawn_enemy(point, AsterBug.Kind.FLYER)
-			if flyer != null:
-				flyer.speed_factor = _flyer_rng.randf_range(0.91, 1.12)
-				spawned += 1
-				if spawned == count:
-					break
+	for attempt in range(nests.size()):
+		var point := nests[(first + attempt) % nests.size()]
+		if not _clear_of_swarm(point, []):
+			continue
+		var flyer := spawn_enemy(point, _wave_kind(true)) as AsterFlyingBug
+		if flyer == null:
+			break
+		flyer.launch_from_nest()
+		flyer.speed_factor = _flyer_rng.randf_range(0.91, 1.12)
+		spawned += 1
+		if spawned == count:
+			break
 	return spawned > 0
 
 func _remove_enemy(bug: AsterBug) -> void:
@@ -139,62 +150,46 @@ func _remove_enemy(bug: AsterBug) -> void:
 		enemies.erase(bug)
 		if bug is AsterFlyingBug:
 			flyer_count -= 1
-		bug_defeated.emit(bug.global_position)
+		if enemies.is_empty():
+			_timer = maxf(_timer, _balance.assault_clear_delay)
+		if bug.awards_kill:
+			bug_defeated.emit(bug.global_position)
 
 func _scatter(count: int) -> Array[PackedVector3Array]:
 	var routes: Array[PackedVector3Array] = []
-	var sites := AsterTerrain.SCREEN_SITES
-	var first_site := _rng.randi_range(0, sites.size() - 1)
 	var eye: Vector3 = _game.player.eye.global_position
 	var world: World3D = _game.get_world_3d()
-	if count > 0 and _rng.randf() < 0.30:
-		var cave := _cave_route()
-		if _clear_of_swarm(cave[0], routes) and _is_screened(world, eye, cave[0]) and _entry_is_clear(world, cave):
-			routes.append(cave)
-	for index in range(count - routes.size()):
-		for attempt in range(26):
-			var site := (first_site + index * 2 + attempt) % sites.size()
-			var center: Vector2 = sites[site]
-			var face := eye.z > center.y + 3.75 and attempt >= 12
-			var depth := center.y - _rng.randf_range(5.3, 7.7) if face else _rng.randf_range(maxf(SPAWN_Z, center.y + 5.6), 73.0)
-			var x := center.x + _rng.randf_range(-4.0, 4.0)
-			var point := Vector3(x, AsterTerrain.surface_height(x, depth) + 0.060, depth)
-			if not _clear_of_swarm(point, routes) or not _is_screened(world, eye, point):
-				continue
-			var route := PackedVector3Array([point])
-			if not face:
-				var high_route := site in AsterTerrain.HIGH_SCREEN_SITES
-				var side := -1 if _rng.randf() < 0.5 else 1
-				if high_route:
-					side = 1 if center.x < 0.0 else -1
-				var channel := center.x + side * 9.6
-				var neighbor := site + side
-				if neighbor >= 0 and neighbor < sites.size():
-					channel = (center.x + sites[neighbor].x) * 0.5
-				channel += _rng.randf_range(-0.67, 0.67)
-				route.append(Vector3(channel, 0.0, center.y + 5.08))
-				route.append(Vector3(channel + _rng.randf_range(-0.58, 0.58), 0.0, center.y - 5.05))
-				if high_route:
-					var slope := signf(center.x)
-					route.append(Vector3(slope * _rng.randf_range(16.4, 21.3), 0.0, _rng.randf_range(36.0, 41.8)))
-					route.append(Vector3(slope * _rng.randf_range(10.9, 15.2), 0.0, _rng.randf_range(23.6, 28.2)))
+	if _cave_routes.is_empty():
+		for index in range(AsterTerrain.CAVE_SITES.size()):
+			var route := _cave_route(index)
 			if _entry_is_clear(world, route):
-				routes.append(route)
+				_cave_routes.append(route)
+	if _cave_routes.is_empty() or count <= 0:
+		return routes
+	var first := _rng.randi_range(0, _cave_routes.size() - 1)
+	for attempt in range(_cave_routes.size()):
+		var route := _cave_routes[(first + attempt) % _cave_routes.size()]
+		var point := route[0]
+		if _clear_of_swarm(point, routes) and _is_screened(world, eye, point):
+			routes.append(route)
+			if routes.size() == count:
 				break
 	return routes
 
-func _cave_route() -> PackedVector3Array:
+func _cave_route(index: int) -> PackedVector3Array:
 	var passage := AsterTerrain.CAVE_PASSAGE
-	var start: Vector2 = passage[-2] + Vector2(_rng.randf_range(-0.83, 0.83), _rng.randf_range(-0.53, 0.60))
-	var point := AsterTerrain.CAVE_MOUTH + Vector3(start.x, 0, start.y)
-	point.y = AsterTerrain.surface_height(point.x, point.z) + 0.060
-	var route := PackedVector3Array([point])
-	for index in range(passage.size() - 3, -1, -1):
-		var turn: Vector2 = passage[index]
-		route.append(AsterTerrain.CAVE_MOUTH + Vector3(turn.x, 0, turn.y))
-	var approach := (AsterTerrain.SCREEN_SITES[2].x + AsterTerrain.SCREEN_SITES[3].x) * 0.5
-	route.append(Vector3(approach, 0.0, 75.0))
-	route.append(Vector3(approach, 0.0, AsterTerrain.SCREEN_Z - 8.0))
+	var pose := AsterTerrain.cave_transform(index)
+	var route := PackedVector3Array()
+	for turn_index in range(passage.size() - 2, -1, -1):
+		var turn: Vector2 = passage[turn_index]
+		var point := pose * Vector3(turn.x, 0, turn.y)
+		point.y = AsterTerrain.surface_height(point.x, point.z) + 0.060
+		route.append(point)
+	var far_exit := pose * Vector3(0, 0, -8.7)
+	var lane: float = AsterTerrain.CAVE_LANES[index]
+	route.append(far_exit)
+	route.append(Vector3(lane, 0, 73.0))
+	route.append(Vector3(lane, 0, AsterTerrain.SCREEN_Z - 13.5))
 	return route
 
 func _entry_is_clear(world: World3D, route: PackedVector3Array) -> bool:
@@ -263,18 +258,19 @@ func spacing_velocity(bug: AsterBug, direction: Vector3) -> Vector3:
 				if absf(offset.y) > 0.8:
 					continue
 				offset.y = 0.0
+				var clearance := 3.0 if bug.kind == AsterBug.Kind.TANK or other.kind == AsterBug.Kind.TANK else SPACING
 				var distance_sq := offset.length_squared()
-				if distance_sq >= SPACING * SPACING:
+				if distance_sq >= clearance * clearance:
 					continue
 				var distance := sqrt(distance_sq)
-				var closeness := 1.0 - distance / SPACING
+				var closeness := 1.0 - distance / clearance
 				var across := offset.dot(lateral)
 				var ahead := offset.dot(direction)
 				# For directly aligned neighbors, opposite choices open up the column.
 				var side := signf(across) if absf(across) > 0.16 else (1.0 if bug.get_instance_id() < other.get_instance_id() else -1.0)
 				steer -= side * closeness
 				if ahead > 0.0:
-					brake = maxf(brake, closeness * (1.0 - absf(across) / SPACING))
+					brake = maxf(brake, closeness * (1.0 - absf(across) / clearance))
 	return direction * (1.0 - brake * 0.53) + lateral * clampf(steer, -0.63, 0.63)
 
 func _is_screened(world: World3D, eye: Vector3, point: Vector3, offsets: Array[Vector3] = GROUND_SCREEN_OFFSETS) -> bool:

@@ -18,6 +18,8 @@ const ARMORY_NORMAL := preload("res://assets/art/materials/armory_normal.png")
 const ARMORY_ROUGHNESS := preload("res://assets/art/materials/armory_roughness.png")
 const CHITIN := preload("res://assets/art/materials/dune_chitin.png")
 const CHITIN_NORMAL := preload("res://assets/art/materials/dune_chitin_normal.png")
+const SIEGE_ROUGHNESS := preload("res://assets/art/materials/dune_siege_roughness.png")
+const SIEGE_OCCLUSION := preload("res://assets/art/materials/dune_siege_occlusion.png")
 const WING := preload("res://assets/art/materials/dune_wing.png")
 const CANYON_GRAVEL := preload("res://assets/art/materials/canyon_gravel.jpg")
 const CANYON_GRAVEL_NORMAL := preload("res://assets/art/materials/canyon_gravel_normal.png")
@@ -39,9 +41,29 @@ const PARTS := {
 	&"carbine_grip": preload("res://assets/art/models/aster_carbine_grip.glb"),
 	&"repair": preload("res://assets/art/models/field_repair_tool.glb"),
 	&"turret_base": preload("res://assets/art/models/turret_base.glb"),
+	&"stinger_base": preload("res://assets/art/models/stinger_base.glb"),
+	&"stinger_head": preload("res://assets/art/models/stinger_head.glb"),
+	&"stinger_barrel": preload("res://assets/art/models/stinger_barrel.glb"),
+	&"dragonfly_base": preload("res://assets/art/models/dragonfly_base.glb"),
+	&"dragonfly_head": preload("res://assets/art/models/dragonfly_head.glb"),
+	&"dragonfly_guns": preload("res://assets/art/models/dragonfly_guns.glb"),
+	&"bulba_base": preload("res://assets/art/models/bulba_base.glb"),
+	&"bulba_head": preload("res://assets/art/models/bulba_head.glb"),
+	&"bulba_pods": preload("res://assets/art/models/bulba_pods.glb"),
 	&"turret_head": preload("res://assets/art/models/turret_head.glb"),
 	&"turret_emitters": preload("res://assets/art/models/turret_emitters.glb"),
 	&"turret_cartridge": preload("res://assets/art/models/turret_cartridge.glb"),
+	&"turret_ammo_layer": preload("res://assets/art/models/turret_ammo_layer.glb"),
+	&"turret_damage_light": preload("res://assets/art/models/turret_damage_light.glb"),
+	&"turret_damage_heavy": preload("res://assets/art/models/turret_damage_heavy.glb"),
+	&"dreadnought_ring": preload("res://assets/art/models/dreadnought_ring.glb"),
+	&"dreadnought_housing": preload("res://assets/art/models/dreadnought_housing.glb"),
+	&"dreadnought_barrels": preload("res://assets/art/models/dreadnought_barrels.glb"),
+	&"facade": preload("res://assets/art/models/fortification_facade.glb"),
+	&"turret_platform": preload("res://assets/art/models/facade_turret_platform.glb"),
+	&"hospital": preload("res://assets/art/models/field_hospital.glb"),
+	&"nest": preload("res://assets/art/models/cliff_nest.glb"),
+	&"scan_rock": preload("res://assets/art/models/rock_face_02.glb"),
 	&"turret_wreck": preload("res://assets/art/models/turret_wreck.glb"),
 	&"bug": preload("res://assets/art/models/dune_beetle.glb"),
 	&"leg_left": preload("res://assets/art/models/beetle_leg_left.glb"),
@@ -53,6 +75,21 @@ const PARTS := {
 	&"flyer": preload("res://assets/art/models/flying_beetle.glb"),
 	&"flyer_tail": preload("res://assets/art/models/flying_beetle_tail.glb"),
 	&"flyer_wing": preload("res://assets/art/models/flying_beetle_wing.glb"),
+	&"tank_shell": preload("res://assets/art/models/tank_shell.glb"),
+	&"ram_shell": preload("res://assets/art/models/ram_shell.glb"),
+	&"catapult_shell": preload("res://assets/art/models/catapult_shell.glb"),
+	&"siege_leg": preload("res://assets/art/models/siege_leg.glb"),
+	&"siege_claw": preload("res://assets/art/models/siege_claw.glb"),
+	&"catapult_tail": preload("res://assets/art/models/catapult_tail.glb"),
+	&"catapult_scoop": preload("res://assets/art/models/catapult_scoop.glb"),
+	&"shooter_quills": preload("res://assets/art/models/shooter_quills.glb"),
+	&"bug_quill": preload("res://assets/art/models/bug_quill.glb"),
+	&"bug_rock": preload("res://assets/art/models/eroded_boulder_1.glb"),
+	&"kamikaze_shell": preload("res://assets/art/models/kamikaze_shell.glb"),
+	&"kamikaze_sac": preload("res://assets/art/models/kamikaze_sac.glb"),
+	&"transporter_shell": preload("res://assets/art/models/transporter_shell.glb"),
+	&"transporter_tail": preload("res://assets/art/models/transporter_tail.glb"),
+	&"transporter_grip": preload("res://assets/art/models/transporter_grip.glb"),
 	&"wall": preload("res://assets/art/models/wall_segment.glb"),
 	&"gate_frame": preload("res://assets/art/models/gate_frame.glb"),
 	&"gate_panels": preload("res://assets/art/models/gate_panels.glb"),
@@ -163,7 +200,7 @@ static func _finish(original: StandardMaterial3D) -> StandardMaterial3D:
 				_set_maps(material, PAINTED, PAINTED_NORMAL, 0.91, PAINTED_ROUGHNESS)
 			"BarrelSteel":
 				_set_maps(material, PARKERIZED, PARKERIZED_NORMAL, 0.7, PARKERIZED_ROUGHNESS)
-			"TurretEnamel":
+			"TurretEnamel", "HospitalEnamel", "HospitalRed":
 				_set_maps(material, PAINTED, PAINTED_NORMAL, 0.78, PAINTED_ROUGHNESS)
 			"TurretCast", "CharredTurret":
 				material.metallic_specular = 0.41
@@ -200,12 +237,27 @@ static func _finish(original: StandardMaterial3D) -> StandardMaterial3D:
 				_set_maps(material, CANYON_CONCRETE, CANYON_CONCRETE_NORMAL, 0.82, CANYON_CONCRETE_ROUGHNESS)
 			"BunkerArmor", "BunkerRim":
 				_set_maps(material, CANYON_ARMOR, CANYON_ARMOR_NORMAL, 0.76, CANYON_ARMOR_ROUGHNESS)
+			"rock_face_02":
+				material.albedo_color = Color(1.25, 1.03, 0.80)
+				material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 			"Rock", "StoneDark", "CanyonLedge", "CanyonShade":
 				material.metallic_specular = 0.26
 				_set_maps(material, CANYON_ROCK, CANYON_ROCK_NORMAL, 0.72, CANYON_ROCK_ROUGHNESS)
 			"DuneChitin":
 				material.metallic_specular = 0.44
 				_set_maps(material, CHITIN, CHITIN_NORMAL, 0.73)
+			"DuneSiegeChitin", "DunePlateEdge", "DuneTendon":
+				material.metallic_specular = 0.43
+				_set_maps(material, CHITIN, CHITIN_NORMAL, 0.73 if finish != "DuneTendon" else 0.39, SIEGE_ROUGHNESS)
+				material.ao_enabled = true
+				material.ao_texture = SIEGE_OCCLUSION
+			"DuneSac", "DuneSacVein":
+				_set_maps(material, CHITIN, CHITIN_NORMAL, 0.35 if finish == "DuneSac" else 0.58)
+				material.clearcoat_enabled = true
+				material.clearcoat = 0.36
+				material.emission_enabled = finish == "DuneSac"
+				material.emission = Color("#6b340b")
+				material.emission_energy_multiplier = 0.37
 			"DuneSinew":
 				material.normal_enabled = true
 				material.normal_texture = ARMORY_NORMAL

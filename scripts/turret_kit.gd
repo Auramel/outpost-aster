@@ -14,6 +14,7 @@ var _steps: Dictionary = {}
 var _mounted_box: MeshInstance3D
 var _ammo_boxes: Array[Node3D] = []
 var _capacity_rank := 0
+var _round_layers: Array[Node3D] = []
 
 func setup(head: Node3D, carriage: Node3D, mount: Node3D) -> void:
 	var rate := _part(AsterTurretTuning.Path.RATE, carriage, Vector3(0, 0.179, -0.44))
@@ -46,6 +47,7 @@ func setup(head: Node3D, carriage: Node3D, mount: Node3D) -> void:
 		_rank_piece(AsterTurretTuning.Path.RANGE, optics, Vector3(0.018, 0.013, 0.034), Vector3(-0.076 + rank * 0.038, 0.129, -0.075), MODULE_LIGHT, true)
 
 	_mounted_box = AsterModels.attach(head, &"turret_cartridge", Vector3(0, -0.058, 0.545))
+	_add_round_layers(_mounted_box)
 	var feed := _part(AsterTurretTuning.Path.CAPACITY, head, Vector3(0, -0.11, 0.60))
 	AsterArt.box(feed, Vector3(1.18, 0.052, 0.23), Vector3(0, -0.168, 0.047), INSERT_COLOR)
 	for side in [-1.0, 1.0]:
@@ -53,7 +55,8 @@ func setup(head: Node3D, carriage: Node3D, mount: Node3D) -> void:
 		storage.position = Vector3(side * 0.394, 0, 0.015)
 		feed.add_child(storage)
 		_ammo_boxes.append(storage)
-		AsterModels.attach(storage, &"turret_cartridge", Vector3.ZERO, Vector3(0.82, 0.91, 0.93))
+		var crate := AsterModels.attach(storage, &"turret_cartridge", Vector3.ZERO, Vector3(0.82, 0.91, 0.93))
+		_add_round_layers(crate)
 	_badge(feed, AsterTurretTuning.Path.CAPACITY, Vector3(0, -0.160, 0.171))
 	for rank in range(AsterTurretTuning.MAX_LEVEL):
 		_rank_piece(AsterTurretTuning.Path.CAPACITY, feed, Vector3(0.043, 0.018, 0.017), Vector3(-0.116 + rank * 0.058, -0.154, 0.163), TRIM_COLOR)
@@ -72,7 +75,7 @@ func setup(head: Node3D, carriage: Node3D, mount: Node3D) -> void:
 	_badge(brace, AsterTurretTuning.Path.STABILITY, Vector3(0, 0.12, 0.23))
 	for rank in range(AsterTurretTuning.MAX_LEVEL):
 		_rank_piece(AsterTurretTuning.Path.STABILITY, brace, Vector3(0.112, 0.029, 0.037), Vector3(0.59, 0.126 - rank * 0.059, 0.144), TRIM_COLOR)
-	set_loaded(true)
+	set_loaded(true, 1.0)
 
 func _part(path: int, parent: Node3D, position: Vector3) -> Node3D:
 	var module := Node3D.new()
@@ -89,10 +92,21 @@ func _badge(parent: Node3D, path: int, position: Vector3) -> void:
 func _rank_piece(path: int, parent: Node3D, size: Vector3, at: Vector3, color: Color, glow := false) -> void:
 	_steps[path].append(AsterArt.box(parent, size, at, color, glow))
 
-func set_loaded(loaded: bool) -> void:
+func _add_round_layers(crate: Node3D) -> void:
+	var layers := Node3D.new()
+	crate.add_child(layers)
+	_round_layers.append(layers)
+	for level in range(5):
+		AsterModels.attach(layers, &"turret_ammo_layer", Vector3(0, -0.090 + 0.044 * level, 0), Vector3.ONE, false)
+
+func set_loaded(loaded: bool, fraction: float) -> void:
 	_mounted_box.visible = loaded
 	_ammo_boxes[0].visible = loaded and _capacity_rank > 0
 	_ammo_boxes[1].visible = loaded and _capacity_rank >= 3
+	var level := ceili(fraction * 5.0)
+	for layers in _round_layers:
+		for index in range(layers.get_child_count()):
+			layers.get_child(index).visible = index < level
 
 func update_rank(path: int, rank: int, limit: int) -> void:
 	var module: Node3D = _parts[path]

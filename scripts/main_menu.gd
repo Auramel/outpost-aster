@@ -17,6 +17,7 @@ var _exit: Button
 var _back: Button
 var _volume: HSlider
 var _mouse: HSlider
+var _view_distance: HSlider
 var _fullscreen: CheckButton
 
 func _ready() -> void:
@@ -104,6 +105,12 @@ func _make_settings() -> void:
 		mouse_caption.text = "Чувствительность мыши   %d%%" % _sensitivity_percent(value)
 	)
 	mouse_caption.text = "Чувствительность мыши   %d%%" % _sensitivity_percent(AsterSettings.sensitivity)
+	var distance_caption := _label(_settings, "Дальность прорисовки   %d м" % AsterSettings.view_distance, 21, MUTED)
+	_view_distance = _slider(_settings, AsterSettings.MIN_VIEW_DISTANCE, AsterSettings.MAX_VIEW_DISTANCE, AsterSettings.VIEW_DISTANCE_STEP, AsterSettings.view_distance)
+	_view_distance.value_changed.connect(func(value: float) -> void:
+		AsterSettings.view_distance = roundi(value)
+		distance_caption.text = "Дальность прорисовки   %d м" % AsterSettings.view_distance
+	)
 	_fullscreen = CheckButton.new()
 	_fullscreen.text = "Полноэкранный режим"
 	_fullscreen.button_pressed = AsterSettings.fullscreen

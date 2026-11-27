@@ -162,7 +162,7 @@ class Model:
                    (u - clip, v), (-u + clip, v), (-u, v - clip), (-u, -v + clip)]
         self.profile(finish, outline, size[axis], min(bevel, clip / 2), axis, center, angle)
 
-    def tube(self, finish, start, end, r1, r2=None, sides=12, section=(1, 1), smooth=True):
+    def tube(self, finish, start, end, r1, r2=None, sides=12, section=(1, 1), smooth=True, cap=True):
         r2 = r1 if r2 is None else r2
         axis = norm(sub(end, start))
         basis = (0, 1, 0) if abs(axis[1]) < 0.9 else (1, 0, 0)
@@ -172,8 +172,9 @@ class Model:
                       mul(north, sin(i * 2 * pi / sides) * section[1])) for i in range(sides)]
         a = [add(start, mul(spoke, r1)) for spoke in spokes]
         b = [add(end, mul(spoke, r2)) for spoke in spokes]
-        self.face(finish, a, mul(axis, -1))
-        self.face(finish, b, axis)
+        if cap:
+            self.face(finish, a, mul(axis, -1))
+            self.face(finish, b, axis)
         for i in range(sides):
             j = (i + 1) % sides
             facing = add(spokes[i], spokes[j])
@@ -595,12 +596,15 @@ def turret_emitters():
 
 def turret_cartridge():
     m = Model("turret_cartridge", 3.0)
-    m.block("TurretEnamel", (0, .008, .049), (.392, .316, .318), .027, axis=2)
-    m.block("TurretCast", (0, .147, .047), (.408, .075, .330), .019, axis=1)
-    m.block("Black", (0, .072, .211), (.148, .038, .019), .008, axis=2)
-    m.block("Hazard", (0, -.042, .215), (.130, .065, .008), .007, axis=2)
-    for x in (-.133, .133):
-        m.block("ScuffedEdge", (x, .014, .212), (.032, .139, .014), .004, axis=2)
+    m.block("TurretCast", (0, -.133, .049), (.392, .057, .318), .015, axis=1)
+    for side in (-1, 1):
+        m.block("TurretEnamel", (side * .177, .011, .049), (.052, .273, .320), .019, axis=2)
+        m.block("TurretCast", (side * .182, .153, .049), (.044, .045, .328), .011, axis=1)
+        m.block("TurretEnamel", (0, -.019, .049 + side * .139), (.321, .215, .058), .016, axis=2)
+        for x in (-.128, .128):
+            rivet(m, (x, -.078, .049 + side * .172), (0, 0, side), .012)
+    m.block("Black", (0, -.077, .224), (.139, .039, .019), .008, axis=2)
+    m.block("Hazard", (0, .052, .222), (.115, .039, .007), .003, axis=2)
     return m
 
 
@@ -959,6 +963,16 @@ def canyon_formation(family):
             zz += .18 * sin(angle * 17 + index * .81) * min(1.0, max(0, height * 12))
             ring.append((xx, y, zz))
         rows.append(ring)
+    normals = []
+    for row_index, row in enumerate(rows):
+        lower = rows[max(0, row_index - 1)]
+        higher = rows[min(len(rows) - 1, row_index + 1)]
+        row_normals = []
+        for spoke in range(count):
+            around = sub(row[(spoke + 1) % count], row[(spoke - 1) % count])
+            rise = sub(higher[spoke], lower[spoke])
+            row_normals.append(norm(cross(rise, around)))
+        normals.append(row_normals)
     circumference = [0.0]
     for index in range(count):
         a, b = rows[0][index], rows[0][(index + 1) % count]
@@ -969,10 +983,15 @@ def canyon_formation(family):
             a, b, c, d = base[index], base[following], roof[following], roof[index]
             finish = "CanyonShade" if band in (4, 8, 12, 15) and rng.random() < .65 else "CanyonLedge"
             ua, ub = circumference[index] * .23, circumference[index + 1] * .23
+            facing = norm(cross(sub(d, a), sub(b, a)))
+            n_a, n_b = normals[band][index], normals[band][following]
+            n_d, n_c = normals[band + 1][index], normals[band + 1][following]
+            smooth = .41 if finish == "CanyonShade" else .74
+            n_a, n_b, n_c, n_d = [norm(mix(facing, normal, smooth)) for normal in (n_a, n_b, n_c, n_d)]
             m.face(finish, [a, c, b], cross(sub(c, a), sub(b, a)),
-                   uv=[(ua, -a[1] * .29), (ub, -c[1] * .29), (ub, -b[1] * .29)])
+                   normals=[n_a, n_c, n_b], uv=[(ua, -a[1] * .29), (ub, -c[1] * .29), (ub, -b[1] * .29)])
             m.face(finish, [a, d, c], cross(sub(d, a), sub(c, a)),
-                   uv=[(ua, -a[1] * .29), (ua, -d[1] * .29), (ub, -c[1] * .29)])
+                   normals=[n_a, n_d, n_c], uv=[(ua, -a[1] * .29), (ua, -d[1] * .29), (ub, -c[1] * .29)])
     crown = rows[-1]
     crest = add(mean(crown), (.16, .58 if family == 1 else .35, -.22))
     for index in range(count):

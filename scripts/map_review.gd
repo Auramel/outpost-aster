@@ -27,12 +27,7 @@ func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	AsterSettings.load_from_disk()
 	_build_map()
-	for structure in walls + [core]:
-		structure.status_tag.hide()
-		structure.status_tag.set_process(false)
-	for turret in turrets:
-		turret.status_tag.hide()
-		turret.status_tag.set_process(false)
+	daylight.set_clock(AsterDaylight.PHASE_LENGTH * 0.43)
 	_picker.setup(self)
 	add_child(_camera)
 	_camera.position = Vector3(19, 18, 35)
