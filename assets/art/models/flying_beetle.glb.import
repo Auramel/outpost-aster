@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://dov55o1h4atu7"
-path="res://.godot/imported/tabletop_mesa.glb-2e95c4f7fddcc8942ea9ed42071f3699.scn"
+uid="uid://c1mpk8d7tlrqw"
+path="res://.godot/imported/flying_beetle.glb-2bb7a80bca093c6ea0438ef1a401784b.scn"
 
 [deps]
 
-source_file="res://assets/art/models/tabletop_mesa.glb"
-dest_files=["res://.godot/imported/tabletop_mesa.glb-2e95c4f7fddcc8942ea9ed42071f3699.scn"]
+source_file="res://assets/art/models/flying_beetle.glb"
+dest_files=["res://.godot/imported/flying_beetle.glb-2bb7a80bca093c6ea0438ef1a401784b.scn"]
 
 [params]
 

@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://dk1iilrkpf8le"
-path="res://.godot/imported/watchtower_frame.glb-1f0965bddb4c7945ed9446094844b8f7.scn"
+uid="uid://bm0ctcpri1slq"
+path="res://.godot/imported/flying_beetle_wing.glb-0f7b831863bcaff3199faa129e60cbcf.scn"
 
 [deps]
 
-source_file="res://assets/art/models/watchtower_frame.glb"
-dest_files=["res://.godot/imported/watchtower_frame.glb-1f0965bddb4c7945ed9446094844b8f7.scn"]
+source_file="res://assets/art/models/flying_beetle_wing.glb"
+dest_files=["res://.godot/imported/flying_beetle_wing.glb-0f7b831863bcaff3199faa129e60cbcf.scn"]
 
 [params]
 

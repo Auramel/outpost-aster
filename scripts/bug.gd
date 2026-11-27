@@ -3,9 +3,10 @@ extends CharacterBody3D
 
 signal died(bug: AsterBug)
 
-enum Kind { GROUND, CLIMBER }
+enum Kind { GROUND, CLIMBER, FLYER }
 
 const ATTACK_REACH := 1.25
+const PLAYER_NOTICE_RANGE := 4.2
 const WINDUP_TIME := 0.21
 const STRIKE_TIME := 0.25
 const FALL_TIME := 0.42
@@ -26,13 +27,14 @@ var _look := Node3D.new()
 var _legs: Array[Node3D] = []
 var _shell: MeshInstance3D
 var _tail := Node3D.new()
-var _sting := Node3D.new()
+var _sting: Node3D
 var _phase := 0.0
 var _step_travel := 0.0
 var _step_side := 1.0
 var _flash := 0.0
 var _voice_left := 0.0
 var _death_left := 0.0
+var _fall_time := FALL_TIME
 var _wounds: Array[MeshInstance3D] = []
 var _next_wound := 0
 var _bleed_time := 0.0
@@ -46,8 +48,6 @@ var _attack_contact := false
 var _chassis_lift := 0.0
 var _attack := 0.25
 var _updated := 0.0
-var _lure_left := 0.0
-var _lure_cooldown := 0.0
 var _ramp_turret: AsterTurret
 
 func setup(game: Node, kind: Kind, formation_offset: Vector2) -> void:
@@ -61,13 +61,7 @@ func setup(game: Node, kind: Kind, formation_offset: Vector2) -> void:
 	collision_layer = AsterArt.ENEMY
 	collision_mask = AsterArt.SOLID
 	floor_snap_length = 0.20
-	var hitbox := CollisionShape3D.new()
-	var capsule := CapsuleShape3D.new()
-	capsule.radius = 0.52
-	capsule.height = 1.13
-	hitbox.shape = capsule
-	hitbox.position.y = 0.58
-	add_child(hitbox)
+	_build_hitbox()
 	add_child(_look)
 	add_to_group(&"wall_occupants")
 	_build_shell()
@@ -75,12 +69,22 @@ func setup(game: Node, kind: Kind, formation_offset: Vector2) -> void:
 	_step_travel = randf_range(0.0, 0.58)
 	_voice_left = randf_range(1.9, 12.8)
 
+func _build_hitbox() -> void:
+	var hitbox := CollisionShape3D.new()
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = 0.52
+	capsule.height = 1.13
+	hitbox.shape = capsule
+	hitbox.position.y = 0.58
+	add_child(hitbox)
+
 func _build_shell() -> void:
 	_shell = AsterModels.attach(_look, &"bug")
 	_shell.lod_bias = 0.76
 	_tail.position = Vector3(0.0, 0.67, 0.57)
 	_look.add_child(_tail)
 	AsterModels.attach(_tail, &"bug_tail", Vector3.ZERO, Vector3.ONE, false).lod_bias = 0.78
+	_sting = Node3D.new()
 	_sting.position = Vector3(0.0, 0.48, 0.51)
 	_tail.add_child(_sting)
 	AsterModels.attach(_sting, &"bug_sting", Vector3.ZERO, Vector3.ONE, false).lod_bias = 0.78
@@ -122,7 +126,7 @@ func damage(amount: float, hit := Vector3.INF, normal := Vector3.UP) -> void:
 		return
 	remove_from_group(&"wall_occupants")
 	set_deferred(&"collision_layer", 0)
-	_death_left = FALL_TIME
+	_death_left = _fall_time
 	set_physics_process(true)
 	_game.sound.bug_cue(AsterSound.BugCue.DEATH, hit_point())
 	died.emit(self)
@@ -168,11 +172,7 @@ func _physics_process(delta: float) -> void:
 		if _death_left <= 0.0:
 			queue_free()
 		else:
-			var fall := 1.0 - _death_left / FALL_TIME
-			_look.rotation.z = fall * fall * 1.39
-			_look.position.y = -fall * 0.36
-			_tail.rotation.x = move_toward(_tail.rotation.x, 0.48, delta * 2.8)
-			_sting.rotation.x = move_toward(_sting.rotation.x, -0.47, delta * 3.0)
+			_update_fall(delta)
 			_bleed(delta)
 		return
 	if _game.lost:
@@ -182,38 +182,49 @@ func _physics_process(delta: float) -> void:
 	_strike_left = maxf(0.0, _strike_left - delta)
 	_attack_contact = false
 	_flash = maxf(0.0, _flash - delta)
-	_lure_cooldown = maxf(0.0, _lure_cooldown - delta)
-	_lure_left = maxf(0.0, _lure_left - delta)
 	_voice_left -= delta
 	if _voice_left <= 0.0:
 		_voice_left = randf_range(6.3, 15.6)
 		_game.sound.bug_cue(AsterSound.BugCue.CALL, hit_point())
 	_bleed(delta)
-	var step_origin := global_position
-	match state:
-		&"incoming":
-			_follow_entry(delta)
-		&"front":
-			_seek_front(delta)
-		&"approach":
-			_approach_wall(delta)
-		&"cross":
-			_cross_wall(delta)
-		&"climb":
-			_climb(delta)
-		&"ledge":
-			_ledge(delta)
-		&"drop":
-			_drop(delta)
-		&"inside":
-			_attack_core(delta)
-		&"ramp":
-			_attack_platform(delta)
+	_move(delta)
 	if not _attack_contact:
 		_attack_target = null
 		_windup_left = 0.0
+	_update_pose(delta)
+
+func _update_fall(delta: float) -> void:
+	var fall := 1.0 - _death_left / FALL_TIME
+	_look.rotation.z = fall * fall * 1.39
+	_look.position.y = -fall * 0.36
+	_tail.rotation.x = move_toward(_tail.rotation.x, 0.48, delta * 2.8)
+	_sting.rotation.x = move_toward(_sting.rotation.x, -0.47, delta * 3.0)
+
+func _move(delta: float) -> void:
+	var step_origin := global_position
+	if state == &"ledge":
+		_climb_pitch = move_toward(_climb_pitch, 0.0, delta * 7.0)
+	if not _engage_player(delta):
+		match state:
+			&"incoming":
+				_follow_entry(delta)
+			&"front":
+				_seek_front(delta)
+			&"approach":
+				_approach_wall(delta)
+			&"cross":
+				_cross_wall(delta)
+			&"climb":
+				_climb(delta)
+			&"ledge":
+				_ledge(delta)
+			&"drop":
+				_drop(delta)
+			&"inside":
+				_attack_core(delta)
+			&"ramp":
+				_attack_platform(delta)
 	_step_on_surface(step_origin)
-	_update_legs(delta)
 
 func _step_on_surface(previous: Vector3) -> void:
 	var climbing := state == &"climb"
@@ -279,8 +290,6 @@ func _wall_point(depth: float) -> Vector3:
 	return wall.global_position + wall.outward * depth + Vector3.RIGHT * _formation_offset.x
 
 func _approach_wall(delta: float) -> void:
-	if _engage_player(delta):
-		return
 	if not climber and wall.blocking:
 		_updated -= delta
 		if _updated <= 0.0:
@@ -331,7 +340,6 @@ func _climb(delta: float) -> void:
 		state = &"ledge"
 
 func _ledge(delta: float) -> void:
-	_climb_pitch = move_toward(_climb_pitch, 0.0, delta * 7.0)
 	var turret: AsterTurret = wall.support
 	if is_instance_valid(turret) and turret.hp > 0.0 and wall.blocking:
 		_turn(-wall.outward, delta)
@@ -349,21 +357,17 @@ func _drop(delta: float) -> void:
 		state = &"inside" if (global_position - wall.global_position).dot(wall.outward) < 0.0 else &"approach"
 
 func _attack_core(delta: float) -> void:
-	if _engage_player(delta):
-		return
 	if not climber and _find_nearby_platform():
 		return
 	var core: AsterStructure = _game.core
-	var offset := global_position - core.global_position
-	var face := Vector3(clampf(offset.x, -AsterStructure.CORE_HALF.x, AsterStructure.CORE_HALF.x), 0, clampf(offset.z, -AsterStructure.CORE_HALF.z, AsterStructure.CORE_HALF.z))
-	var direction := AsterArt.horizontal(offset - face)
-	var distance := direction.length()
-	if distance <= ATTACK_REACH:
-		_turn(-direction, delta)
+	var face := core.global_position + Vector3(clampf(global_position.x - core.global_position.x, -1.8, 1.8), 0, AsterStructure.CORE_HALF.z)
+	var direction := AsterArt.horizontal(face - global_position)
+	if direction.length() <= ATTACK_REACH:
+		_turn(direction, delta)
 		_stop(delta)
 		_hit(core)
 	else:
-		_walk(core.global_position + face + direction.normalized() * 0.73, delta)
+		_walk(face + Vector3.BACK * 0.73, delta)
 
 func _find_nearby_platform() -> bool:
 	for turret: AsterTurret in _game.turrets:
@@ -409,21 +413,26 @@ func _move_on_platform(mount: AsterStructure, depth: float, destination: float, 
 
 func _engage_player(delta: float) -> bool:
 	var player: AsterPlayer = _game.player
-	if not player.alive or absf(player.global_position.y - global_position.y) > 1.20:
+	if not player.alive or state == &"climb" or state == &"drop":
 		return false
 	var point := player.global_position
-	var distance := AsterArt.horizontal(point - global_position).length()
-	if distance > 4.2 or maxf(absf(point.x), absf(point.z)) > 16.0 or _lure_cooldown > 0.0:
+	var offset := point - global_position
+	if absf(offset.y) > 1.20:
 		return false
-	if not AsterArt.ray(get_world_3d(), hit_point(), point + Vector3.UP * 0.9, AsterArt.SOLID).is_empty():
+	offset.y = 0.0
+	var distance := offset.length_squared()
+	var on_platform := state == &"ramp" or state == &"ledge"
+	var notice_range := ATTACK_REACH if on_platform else PLAYER_NOTICE_RANGE
+	if distance > notice_range * notice_range:
 		return false
-	if _lure_left == 0.0:
-		_lure_left = 1.65
-	if _lure_left <= delta:
-		_lure_cooldown = 2.2
-	if distance <= ATTACK_REACH:
-		_turn(point - global_position, delta)
-		_stop(delta)
+	if not AsterArt.ray(get_world_3d(), hit_point(), point + Vector3.UP * 0.9, AsterArt.SOLID | AsterArt.ACCESS).is_empty():
+		return false
+	if distance <= ATTACK_REACH * ATTACK_REACH:
+		_turn(offset, delta)
+		if on_platform:
+			velocity = Vector3.ZERO
+		else:
+			_stop(delta)
 		_hit(player)
 	else:
 		_walk(point, delta)
@@ -485,7 +494,7 @@ func _turn(direction: Vector3, delta: float) -> void:
 	if direction.length_squared() > 0.0001:
 		rotation.y = rotate_toward(rotation.y, atan2(-direction.x, -direction.z), 10.0 * delta)
 
-func _update_legs(delta: float) -> void:
+func _update_pose(delta: float) -> void:
 	var moving := velocity.length_squared() > 0.3 or state == &"climb" or state == &"ledge" or state == &"ramp"
 	_phase += delta * (15.2 if moving else 4.2)
 	var bob := 0.038 if moving else 0.009

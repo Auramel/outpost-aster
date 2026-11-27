@@ -60,6 +60,9 @@ extends Resource
 @export var climb_speed: float = 3.3
 @export var ground_damage: float = 14.0
 @export var climber_damage: float = 17.0
+@export var flyer_hp: float = 94.0
+@export var flyer_speed: float = 7.6
+@export var flyer_damage: float = 18.0
 @export var bug_attack_period: float = 0.88
 @export_range(1, 120) var active_limit: int = 120
 @export_range(1, 120) var assault_opening_population: int = 9

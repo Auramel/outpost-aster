@@ -4,7 +4,11 @@ extends RefCounted
 const FRONT_Z := 12.0
 const FRONT_HALF_WIDTH := 12.0
 const FRONT_APPROACH_Z := FRONT_Z + 2.10
+const BUNKER_GATE := Vector3(0, 0, -13.65)
 const ARENA_EDGE := 78.0
+const FAR_EDGE := 98.0
+const CAVE_MOUTH := Vector3(4.2, 0, 86.5)
+const CAVE_PASSAGE := [Vector2(0, 0), Vector2(-0.25, 2.15), Vector2(0.68, 4.55), Vector2(3.24, 6.74), Vector2(6.23, 8.30), Vector2(7.45, 10.23)]
 const SCREEN_Z := 53.8
 const SCREEN_SITES := [
 	Vector2(-47.3, 55.1), Vector2(-28.2, 52.4), Vector2(-8.6, 54.8),
@@ -62,10 +66,13 @@ static func build(world: Node3D) -> void:
 	_build_screening_ridges(world)
 	_build_desert_dressing(world)
 	_build_bastions(world)
+	_build_cave(world)
+	_build_cliff_balconies(world)
 
 	for side: float in [-1, 1]:
-		AsterArt.collider(world, Vector3(0.5, 70, ARENA_EDGE * 2.0 + 2.0), Vector3(side * ARENA_EDGE, 8, 0), AsterArt.SOLID)
-		AsterArt.collider(world, Vector3(ARENA_EDGE * 2.0 + 2.0, 70, 0.5), Vector3(0, 8, side * ARENA_EDGE), AsterArt.SOLID)
+		AsterArt.collider(world, Vector3(0.5, 70, ARENA_EDGE + FAR_EDGE + 2.0), Vector3(side * ARENA_EDGE, 8, (FAR_EDGE - ARENA_EDGE) * 0.5), AsterArt.SOLID)
+	for edge: float in [-ARENA_EDGE, FAR_EDGE]:
+		AsterArt.collider(world, Vector3(ARENA_EDGE * 2.0 + 2.0, 70, 0.5), Vector3(0, 8, edge), AsterArt.SOLID)
 
 static func _height_profile(x: float, z: float) -> float:
 	var apron := smoothstep(18.5, 34.0, z)
@@ -193,14 +200,147 @@ static func _build_bastions(world: Node3D) -> void:
 		var seam := Vector3(0.58, 2.92, 0.61)
 		AsterArt.box(approach, seam, joint, AsterArt.METAL).material_override = AsterModels.deck_finish()
 		AsterArt.collider(approach, seam, joint, AsterArt.SOLID)
+		var foot := Vector3(side * 14.90, 8.49 if side < 0 else 7.65, 13.84)
+		AsterArt.box(approach, Vector3(0.68, 0.18, 0.76), foot, AsterArt.METAL).material_override = AsterModels.deck_finish()
+		AsterArt.box(approach, Vector3(0.22, 0.65, 0.25), foot + Vector3.UP * 0.33, AsterArt.DARK)
+		_floodlight(approach, foot + Vector3.UP * 0.74, Vector3(side * 8.0, 0, 27.0), 4.1)
+
+static func _build_cliff_balconies(world: Node3D) -> void:
+	_balcony(world, Vector3(-12.55, 9.38, 1.80), PI * 0.5, 4.10)
+	_balcony(world, Vector3(-0.80, 9.32, -12.85), 0.0, 5.35)
+	_balcony(world, Vector3(13.30, 9.52, -1.50), -PI * 0.5, 3.70)
+
+static func _balcony(world: Node3D, at: Vector3, yaw: float, width: float) -> void:
+	var balcony := Node3D.new()
+	balcony.name = "ServiceBalcony"
+	balcony.position = at
+	balcony.rotation.y = yaw
+	world.add_child(balcony)
+	AsterArt.box(balcony, Vector3(width, 0.26, 2.05), Vector3(0, 0, 0.52), AsterArt.METAL).material_override = AsterModels.deck_finish()
+	AsterArt.box(balcony, Vector3(width - 0.16, 1.88, 0.64), Vector3(0, 0.88, -0.31), AsterArt.METAL).material_override = AsterModels.deck_finish()
+	AsterArt.box(balcony, Vector3(0.90, 1.47, 0.13), Vector3(-width * 0.22, 0.74, 0.03), AsterArt.DARK)
+	AsterArt.box(balcony, Vector3(0.10, 0.10, 0.04), Vector3(-width * 0.22 + 0.30, 0.74, 0.11), AsterArt.AMBER, true)
+	AsterArt.box(balcony, Vector3(width, 0.075, 0.075), Vector3(0, 0.99, 1.51), AsterArt.PALE)
+	AsterArt.box(balcony, Vector3(width, 0.044, 0.044), Vector3(0, 0.54, 1.51), AsterArt.METAL)
+	for x: float in [-width * 0.48, 0.0, width * 0.48]:
+		AsterArt.box(balcony, Vector3(0.074, 0.88, 0.074), Vector3(x, 0.56, 1.51), AsterArt.METAL)
+	for x: float in [-width * 0.34, width * 0.34]:
+		var brace := AsterArt.box(balcony, Vector3(0.19, 1.94, 0.22), Vector3(x, -0.83, 0.52), AsterArt.DARK)
+		brace.rotation.x = -0.73
+	for x: float in [-width * 0.48, width * 0.48]:
+		AsterArt.box(balcony, Vector3(0.075, 0.075, 1.52), Vector3(x, 0.99, 0.76), AsterArt.PALE)
+	_floodlight(balcony, Vector3(width * 0.25, -0.39, 1.63), Vector3(width * 0.50, -9.4, 8.0), 2.8)
+
+static func _floodlight(parent: Node3D, at: Vector3, target: Vector3, energy: float) -> void:
+	var lamp := Node3D.new()
+	lamp.name = "Floodlight"
+	lamp.position = at
+	parent.add_child(lamp)
+	lamp.look_at(parent.to_global(target))
+	AsterArt.box(lamp, Vector3(0.77, 0.46, 0.32), Vector3.ZERO, AsterArt.DARK).material_override = AsterModels.deck_finish()
+	AsterArt.box(lamp, Vector3(0.67, 0.34, 0.04), Vector3(0, 0, -0.166), Color("#e2f5ff"), true)
+	for x: float in [-0.22, 0.0, 0.22]:
+		AsterArt.box(lamp, Vector3(0.022, 0.35, 0.032), Vector3(x, 0, -0.196), AsterArt.DARK)
+	var beam := SpotLight3D.new()
+	beam.position.z = -0.22
+	beam.light_color = Color("#cce8ff")
+	beam.light_energy = energy
+	beam.spot_range = 23.0
+	beam.spot_angle = 32.0
+	lamp.add_child(beam)
+
+static func _build_cave(world: Node3D) -> void:
+	var passage := [Vector2(-2.63, -0.83), Vector2(-2.46, 1.37), Vector2(-1.89, 2.74), Vector2(-0.68, 3.46),
+		Vector2(0.86, 3.34), Vector2(1.96, 2.60), Vector2(2.43, 1.22), Vector2(2.51, -0.79)]
+	var ridge := [Vector2(-11.40, -0.86), Vector2(-9.75, 2.20), Vector2(-6.90, 5.14), Vector2(-2.76, 7.40),
+		Vector2(2.41, 7.66), Vector2(7.88, 5.84), Vector2(11.64, 3.51), Vector2(14.15, -0.86)]
+	var inside: Array[PackedVector3Array] = []
+	var outside: Array[PackedVector3Array] = []
+	for index in range(CAVE_PASSAGE.size()):
+		var station: Vector2 = CAVE_PASSAGE[index]
+		var inner := PackedVector3Array()
+		var outer := PackedVector3Array()
+		for edge in range(passage.size()):
+			var opening: Vector2 = passage[edge]
+			var rock: Vector2 = ridge[edge]
+			var height := sin(index * 1.06 + edge * 0.64)
+			var above_floor := smoothstep(-0.7, 2.0, opening.y)
+			inner.append(Vector3(station.x + opening.x, opening.y + height * above_floor * 0.16, station.y))
+			var spread := 0.96 + sin(index * 0.77 + 0.21) * 0.15
+			var setback := sin(edge * 0.91 + index * 0.52) * 0.90
+			outer.append(Vector3(station.x * 0.62 + rock.x * spread, rock.y + height * above_floor * 0.88, station.y + setback))
+		inside.append(inner)
+		outside.append(outer)
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var entrance := PackedVector3Array()
+	var ledges := [-1.65, -2.15, -1.36, -0.60, -1.82, -1.02, -2.32, -1.90]
+	for edge in range(passage.size()):
+		var ledge := inside[0][edge].lerp(outside[0][edge], 0.38 + 0.14 * sin(edge * 2.5))
+		ledge.z = ledges[edge]
+		entrance.append(ledge)
+	for edge in range(passage.size() - 1):
+		var opening: Vector2 = passage[edge].lerp(passage[edge + 1], 0.5)
+		var facing := Vector3(opening.x, opening.y - 0.32, 0).normalized()
+		var color := Color("#d2c4af").lerp(Color("#9c8574"), 0.18 + 0.16 * cos(edge * 2.7))
+		for index in range(CAVE_PASSAGE.size() - 1):
+			var shade := color.darkened(0.19 + 0.06 * index)
+			_cave_face(surface, [inside[index][edge], inside[index + 1][edge], inside[index + 1][edge + 1], inside[index][edge + 1]], -facing, shade)
+			_cave_face(surface, [outside[index][edge], outside[index + 1][edge], outside[index + 1][edge + 1], outside[index][edge + 1]], facing, color)
+		_cave_face(surface, [inside[0][edge], inside[0][edge + 1], entrance[edge + 1], entrance[edge]], Vector3.FORWARD, color.darkened(0.09))
+		_cave_face(surface, [entrance[edge], entrance[edge + 1], outside[0][edge + 1], outside[0][edge]], Vector3.FORWARD, color)
+		_cave_face(surface, [inside[-1][edge], inside[-1][edge + 1], outside[-1][edge + 1], outside[-1][edge]], Vector3.BACK, color)
+		var center := Vector3(CAVE_PASSAGE[-1].x, -0.84, CAVE_PASSAGE[-1].y)
+		_cave_face(surface, [inside[-1][edge], inside[-1][edge + 1], center], Vector3.FORWARD, color.darkened(0.37))
+	surface.generate_tangents()
+	var cave := MeshInstance3D.new()
+	cave.name = "DuneCave"
+	cave.position = CAVE_MOUTH
+	cave.mesh = surface.commit()
+	cave.material_override = AsterModels.cliff_finish()
+	world.add_child(cave)
+	var solid := StaticBody3D.new()
+	solid.collision_layer = AsterArt.SOLID | AsterArt.SPAWN_SCREEN
+	solid.collision_mask = 0
+	var shape := cave.mesh.create_trimesh_shape()
+	shape.backface_collision = true
+	var collision := CollisionShape3D.new()
+	collision.shape = shape
+	solid.add_child(collision)
+	cave.add_child(solid)
+
+static func _cave_face(surface: SurfaceTool, points: Array, facing: Vector3, tint: Color) -> void:
+	for index in range(2, points.size()):
+		var a: Vector3 = points[0]
+		var b: Vector3 = points[index - 1]
+		var c: Vector3 = points[index]
+		var normal := (c - a).cross(b - a).normalized()
+		var vertices := [a, b, c]
+		if normal.dot(facing) < 0.0:
+			normal = -normal
+			vertices = [a, c, b]
+		for vertex: Vector3 in vertices:
+			var uv := Vector2(vertex.x, vertex.z)
+			if absf(normal.y) < 0.60:
+				uv = Vector2(vertex.z if absf(normal.x) > absf(normal.z) else vertex.x, -vertex.y)
+			surface.set_uv(uv * 0.29)
+			surface.set_color(tint)
+			surface.set_normal(normal)
+			surface.add_vertex(vertex)
 
 static func _build_mountain(world: Node3D) -> void:
 	var rear := -FRONT_Z
 	var toe := FRONT_Z + 0.43
 	var far_edge := ARENA_EDGE + 6.0
 	var rock_width := far_edge - FRONT_HALF_WIDTH
-	AsterArt.collider(world, Vector3(far_edge * 2, 38, far_edge + rear), Vector3(0, 15, (rear - far_edge) * 0.5), AsterArt.SOLID)
-	_cliff(world, Vector3(-far_edge, 0, rear), Vector3(far_edge, 0, rear), Vector3.FORWARD, 610, 20.0)
+	var opening := 2.76
+	var recess_back := BUNKER_GATE.z - 2.7
+	for side: float in [-1.0, 1.0]:
+		AsterArt.collider(world, Vector3(far_edge - opening, 38, far_edge + rear), Vector3(side * (far_edge + opening) * 0.5, 15, (rear - far_edge) * 0.5), AsterArt.SOLID)
+	AsterArt.collider(world, Vector3(opening * 2.0, 38, far_edge + recess_back), Vector3(0, 15, (recess_back - far_edge) * 0.5), AsterArt.SOLID)
+	AsterArt.collider(world, Vector3(opening * 2.0, 29.2, rear - recess_back), Vector3(0, 19.2, (rear + recess_back) * 0.5), AsterArt.SOLID)
+	_cliff(world, Vector3(-far_edge, 0, rear), Vector3(far_edge, 0, rear), Vector3.FORWARD, 610, 20.0, true)
+	_build_gate_recess(world, rear)
 	for side: float in [-1.0, 1.0]:
 		var inner_edge := side * FRONT_HALF_WIDTH
 		var outer_edge := side * far_edge
@@ -208,7 +348,23 @@ static func _build_mountain(world: Node3D) -> void:
 		_cliff(world, Vector3(inner_edge, 0, rear), Vector3(inner_edge, 0, toe), Vector3.RIGHT * side, 1200 + int(side), 17.8)
 		_cliff(world, Vector3(inner_edge, 0, toe), Vector3(outer_edge, 0, toe), Vector3.FORWARD, 129 + int(side), 16.8)
 
-static func _cliff(world: Node3D, start: Vector3, finish: Vector3, outward: Vector3, seed: int, height: float) -> void:
+static func _build_gate_recess(world: Node3D, rear: float) -> void:
+	var recess := Node3D.new()
+	recess.name = "BunkerRecess"
+	recess.position = Vector3(0, 0, BUNKER_GATE.z)
+	world.add_child(recess)
+	var depth := rear - BUNKER_GATE.z + 0.78
+	AsterArt.box(recess, Vector3(6.42, 0.47, depth), Vector3(0, 4.87, 0.56), AsterArt.DARK).material_override = AsterModels.deck_finish()
+	AsterArt.box(recess, Vector3(5.64, 4.64, 0.26), Vector3(0, 2.32, -1.24), AsterArt.DARK)
+	for side: float in [-1.0, 1.0]:
+		AsterArt.box(recess, Vector3(0.76, 4.70, depth), Vector3(side * 3.02, 2.35, 0.56), AsterArt.METAL).material_override = AsterModels.deck_finish()
+		AsterArt.box(recess, Vector3(0.18, 3.8, 0.14), Vector3(side * 3.14, 2.0, 1.81), AsterArt.DARK)
+		AsterArt.box(recess, Vector3(0.09, 0.65, 0.08), Vector3(side * 3.14, 3.50, 1.90), AsterArt.AMBER, true)
+		for index in range(8):
+			var at := Vector3(side * 2.44, 0.014, 0.52 + index * 0.42)
+			AsterArt.box(recess, Vector3(0.19, 0.014, 0.22), at, AsterArt.AMBER)
+
+static func _cliff(world: Node3D, start: Vector3, finish: Vector3, outward: Vector3, seed: int, height: float, bunker_opening := false) -> void:
 	var random := RandomNumberGenerator.new()
 	random.seed = seed
 	var mesh := SurfaceTool.new()
@@ -223,10 +379,15 @@ static func _cliff(world: Node3D, start: Vector3, finish: Vector3, outward: Vect
 	]
 	var rock := Color("#e1d7c9")
 	var seam := Color("#ac9688")
+	var opening_row := 5
+	var opening_start := floori(segments * 0.5) - 2
+	var opening_end := ceili(segments * 0.5) + 2
 	var columns: Array[PackedVector3Array] = []
 	for segment in range(segments + 1):
 		var t := float(segment) / segments
 		var center := start.lerp(finish, t)
+		if bunker_opening and segment in [opening_start, opening_end]:
+			center.x = -3.25 if segment == opening_start else 3.25
 		var edge := smoothstep(0.0, 0.08, minf(t, 1.0 - t))
 		var roll := 3.10 * sin(segment * 0.132 + seed) + 1.96 * sin(segment * 0.31 + 1.4) + 0.70 * sin(segment * 0.61)
 		var width_break := sin(segment * 0.57 + seed) * 0.95 + sin(segment * 0.23) * 0.98
@@ -237,6 +398,8 @@ static func _cliff(world: Node3D, start: Vector3, finish: Vector3, outward: Vect
 			y += random.randf_range(-0.27, 0.27) * minf(1.0, bed.y * 6.0) * edge
 			if row > 0 and row < beds.size() - 2:
 				y = maxf(y, column[row - 1].y + 0.079)
+			if bunker_opening and row == opening_row and segment >= opening_start and segment <= opening_end:
+				y = 4.94
 			var depth := bed.x + edge * (width_break + random.randf_range(-0.30, 0.30)) * minf(1.0, bed.y * 2.2)
 			column.append(center + outward * maxf(-0.30, depth) + Vector3.UP * y)
 		columns.append(column)
@@ -246,6 +409,8 @@ static func _cliff(world: Node3D, start: Vector3, finish: Vector3, outward: Vect
 		var left := columns[segment]
 		var right := columns[segment + 1]
 		for row in range(beds.size() - 1):
+			if bunker_opening and segment >= opening_start and segment < opening_end and row < opening_row:
+				continue
 			var compress := row in [4, 8, 12]
 			var tint := (seam if compress else rock).lerp(Color("#e6dace"), 0.10 + 0.09 * sin(segment * 0.41 + row))
 			var n_left := _bed_normal(columns, segment, row) * orientation

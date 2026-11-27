@@ -31,6 +31,7 @@ func _fresh(run_assault := false) -> void:
 	current_scene = game
 	player = game.player
 	game.assault._rng.seed = 723
+	game.assault._flyer_rng.seed = 724
 	game.assault.set_physics_process(run_assault)
 	await _frames(5)
 
@@ -90,6 +91,10 @@ func _run() -> void:
 	await _ballistics()
 	await _fresh()
 	await _creature_combat()
+	await _fresh()
+	await _player_aggro()
+	await _fresh()
+	await _flying_bugs()
 	await _fresh()
 	await _wall_stages()
 	await _fresh()
@@ -168,15 +173,15 @@ func _assets_are_live() -> void:
 	var legs: Array = actor.get("_legs")
 	_expect(shell.mesh.get_surface_count() >= 3 and legs.size() == 6 and legs[0].has_node("claw_left") and legs[3].has_node("claw_right") and legs[1].has_node("leg_left") and legs[5].has_node("leg_right"), "insect attaches four stride legs and two separate foreclaws")
 	var chitin := false
+	var amber_eyes := false
 	for index in range(shell.mesh.get_surface_count()):
 		var finish := shell.mesh.surface_get_material(index) as StandardMaterial3D
 		chitin = chitin or (finish.albedo_texture == AsterModels.CHITIN and finish.normal_texture == AsterModels.CHITIN_NORMAL)
-	var sting := actor._sting.get_node("bug_sting") as MeshInstance3D
-	var luminous := false
-	for index in range(sting.mesh.get_surface_count()):
-		var finish := sting.mesh.surface_get_material(index) as StandardMaterial3D
-		luminous = luminous or (finish.resource_name == "DuneSporeLamp" and finish.emission_enabled)
-	_expect(chitin and luminous and actor._tail.has_node("bug_tail"), "the new shell uses dedicated chitin maps and the articulated stinger glows")
+		amber_eyes = amber_eyes or (finish.resource_name == "DuneEyeLamp" and finish.emission_enabled)
+	var stinger := actor._sting.get_node("bug_sting") as MeshInstance3D
+	var stinger_finish := stinger.mesh.surface_get_material(0) as StandardMaterial3D
+	_expect(chitin and amber_eyes and stinger_finish.albedo_texture == AsterModels.CHITIN and actor._tail.has_node("bug_tail"),
+		"the beetle has a chitin shell, amber eyes and an armored two-part tail")
 	var environment := actor.get_world_3d().environment
 	_expect(environment.sky.sky_material is PanoramaSkyMaterial and AsterModels.floor_finish().normal_texture == AsterModels.CANYON_GRAVEL_NORMAL, "scene uses the daylight sky and textured canyon ground")
 	await _frames(2)
@@ -686,6 +691,102 @@ func _creature_combat() -> void:
 	var step_voice := sound._bug_step_voices[posmod(sound._next_bug_step - 1, sound._bug_step_voices.size())]
 	_expect(sound._next_bug_step != step_cursor and step_voice.stream in sound._bug_sand_steps and step_voice.global_position.distance_to(walker.global_position) < 1.0, "a moving bug plays a localized claw step on sand")
 
+func _player_aggro() -> void:
+	_hold_fire()
+	await _warp(Vector3(0, 0.05, 25.0))
+	var incoming: AsterBug = game.assault.spawn_enemy(player.global_position + Vector3.BACK * 2.7)
+	incoming.set_entry_path(PackedVector3Array([incoming.global_position + Vector3.RIGHT * 6.0]))
+	var hp := player.hp
+	await _frames(65)
+	_expect(player.hp < hp and incoming.state == &"incoming", "an incoming bug leaves its route to chase and hit a nearby player outside the walls")
+	await _frames(50)
+	hp = player.hp
+	await _frames(60)
+	_expect(player.hp < hp and player.alive, "an incoming bug keeps attacking a player who stays within reach")
+	await _warp(Vector3(0, 0.05, 7.9))
+	var x := incoming.global_position.x
+	await _frames(25)
+	_expect(incoming.global_position.x > x + 0.8, "the bug resumes its entry route when the player leaves")
+	incoming.damage(incoming.hp)
+
+	await _warp(Vector3(0, 0.05, 25.0))
+	var marching: AsterBug = game.assault.spawn_enemy(player.global_position + Vector3.FORWARD * 0.95)
+	hp = player.hp
+	await _frames(40)
+	_expect(player.hp < hp and marching.global_position.distance_to(player.global_position) < 1.3,
+		"a bug marching to the front turns and strikes a player at point-blank range")
+	marching.damage(marching.hp)
+
+	var door: Vector3 = game.gate.global_position
+	await _warp(door + Vector3(0, 0.05, -0.76))
+	var screened: AsterBug = game.assault.spawn_enemy(door + Vector3(0, 0.05, 0.98))
+	var start := screened.global_position
+	screened.set_entry_path(PackedVector3Array([start + Vector3.BACK * 6.0]))
+	hp = player.hp
+	await _frames(45)
+	_expect(player.hp == hp and screened.global_position.z > start.z + 1.4, "a closed gate screens the player from a nearby bug")
+
+	var mount: AsterTurret = game.turrets[1]
+	var ramp := AsterTerrain.ramp_point(mount.wall, 6.0)
+	await _warp(ramp + Vector3(0.48, 0.035, 0))
+	var raider: AsterBug = game.assault.spawn_enemy(ramp + Vector3(-0.48, 0.035, 0))
+	raider._ramp_turret = mount
+	raider.state = &"ramp"
+	start = raider.global_position
+	hp = player.hp
+	await _frames(40)
+	_expect(player.hp < hp and raider.global_position.is_equal_approx(start), "a bug can strike a nearby player without stepping off the ramp")
+
+func _flying_bugs() -> void:
+	_hold_fire()
+	var director: AsterAssault = game.assault
+	game.balance.active_limit = 12
+	for index in range(director.ground_cap()):
+		var ground := director.spawn_enemy(Vector3(index * 2.0 - 11.0, 0.05, 30.0))
+		ground.set_physics_process(false)
+	director.set_physics_process(true)
+	var flyer: AsterFlyingBug
+	for index in range(150):
+		await physics_frame
+		for bug in director.enemies:
+			if bug is AsterFlyingBug:
+				flyer = bug
+				break
+		if flyer != null:
+			break
+	_expect(flyer != null and director.enemies.size() - director.flyer_count == director.ground_cap(),
+		"the opening siege launches flyers even when all ground slots are taken")
+	if flyer == null:
+		return
+	_expect(director._is_screened(player.get_world_3d(), player.eye.global_position, flyer.global_position, AsterAssault.FLYER_SCREEN_OFFSETS),
+		"the airborne spawn is hidden behind a ridge")
+	await _frames(180)
+	_expect(director.flyer_count >= 3 and director.elapsed < 6.0, "airborne waves keep arriving at the opening siege cadence")
+	director.set_physics_process(false)
+	for bug in director.enemies:
+		if bug != flyer:
+			bug.set_physics_process(false)
+	var wing := flyer._wings[0].rotation.z
+	await _frames(8)
+	_expect(not is_equal_approx(flyer._wings[0].rotation.z, wing) and flyer._tail.has_node("flyer_tail"),
+		"the airborne model animates separate wings and a hanging tail")
+	var hp := player.hp
+	for index in range(1080):
+		if player.hp < hp:
+			break
+		await physics_frame
+	_expect(player.hp < hp and game.gate.blocking and game.gate.hp == game.gate.max_hp and flyer.global_position.z < game.gate.global_position.z,
+		"a flyer crosses the closed perimeter and dives at the player")
+	if player.hp >= hp:
+		return
+	flyer.set_physics_process(false)
+	var start := flyer.global_position.y
+	var origin := player.eye.global_position
+	game.fire_round(origin, origin.direction_to(flyer.hit_point()), 20.0, flyer.hp + 1.0, false, origin, Vector3.RIGHT)
+	await _frames(22)
+	_expect(flyer.hp == 0.0 and flyer not in director.enemies and flyer.global_position.y < start,
+		"a rifle round kills a flyer and drops it from the air")
+
 func _wall_stages() -> void:
 	var wall: AsterStructure = game.walls[4]
 	_expect(wall.damage_stage == 0 and not wall._damage_visual.visible, "intact wall has a clean exterior")
@@ -711,6 +812,10 @@ func _gate_and_mountain() -> void:
 	var right_rock := AsterArt.ray(world, Vector3(0, 1.05, 6), Vector3(18, 1.05, 6), AsterArt.SOLID)
 	var rear_rock := AsterArt.ray(world, Vector3(-4, 1.05, 4), Vector3(-4, 1.05, -18), AsterArt.SOLID)
 	_expect(not left_rock.is_empty() and not right_rock.is_empty() and not rear_rock.is_empty(), "solid mountain covers left flank, right flank and rear")
+	var core: AsterStructure = game.core
+	var bunker := AsterArt.ray(world, Vector3(0, 1.05, 4), Vector3(0, 1.05, -18), AsterArt.SOLID)
+	_expect(not bunker.is_empty() and bunker.collider.get_meta(&"target", null) == core and bunker.position.z < -AsterTerrain.FRONT_Z,
+		"the rear cliff opens into a recessed, damageable bunker gate")
 	var frontline := true
 	for section: AsterStructure in game.walls:
 		frontline = frontline and section.outward == Vector3.BACK and is_equal_approx(section.global_position.z, AsterTerrain.FRONT_Z)
@@ -749,8 +854,9 @@ func _gate_and_mountain() -> void:
 	await _warp(Vector3(-9, 0.08, -8))
 	var bug: AsterBug = game.assault.spawn_enemy(door + Vector3.BACK * 10.0 + Vector3.UP * 0.06)
 	var health := gate.hp
-	await _frames(460)
-	_expect(bug.state == &"inside" and bug.global_position.z < door.z - 0.4 and gate.hp == health and game.core.hp < game.core.max_hp, "ground bugs enter through an open gate without attacking it")
+	await _frames(710)
+	_expect(bug.state == &"inside" and bug.global_position.z < door.z - 0.4 and gate.hp == health and core.hp < core.max_hp,
+		"ground bugs use the open perimeter gate and attack the bunker gate")
 	bug.damage(bug.hp)
 	gate.damage(gate.hp)
 	_expect(not gate.gate_open and not gate.blocking, "destroyed gate leaves the opening passable")
@@ -760,7 +866,7 @@ func _gate_and_mountain() -> void:
 
 func _continuous_siege() -> void:
 	var director: AsterAssault = game.assault
-	var population := director.target_population()
+	var population := director.target_population(director.ground_cap())
 	var interval := director.spawn_interval()
 	var observed := {}
 	var hidden := true
@@ -778,7 +884,7 @@ func _continuous_siege() -> void:
 			hidden = hidden and bug.global_position.z >= AsterAssault.SPAWN_Z - 0.2 and not AsterArt.ray(player.get_world_3d(), player.eye.global_position, bug.global_position, AsterArt.SPAWN_SCREEN).is_empty()
 	_expect(observed.size() >= 7 and director.elapsed > 11.0, "an untouched match continuously deploys attackers automatically")
 	_expect(hidden and max_x - min_x > 32.0, "initial attackers arrive behind several distant ridges")
-	_expect(director.target_population() > population and director.spawn_interval() < interval, "spawn population rises and delay falls with survived time")
+	_expect(director.target_population(director.ground_cap()) > population and director.spawn_interval() < interval, "spawn population rises and delay falls with survived time")
 	_expect(game.hud._phase.text.begins_with("ОСАДА") and "На поле" in game.hud._objective.text, "HUD reports elapsed siege and active enemy counts")
 	for index in range(1200):
 		if game.kills > 0:
@@ -817,9 +923,12 @@ func _mountain_routes() -> void:
 func _cap_and_replacements() -> void:
 	_hold_fire()
 	var director: AsterAssault = game.assault
-	var cap := AsterAssault.ACTIVE_CAP
-	_expect(director.active_cap() == cap, "standard late-game population uses the tested active cap")
-	game.balance.active_limit = cap + 26
+	var ground_cap := AsterAssault.GROUND_CAP
+	var flyer_cap := floori(ground_cap * 0.5)
+	var cap := director.active_cap()
+	_expect(director.ground_cap() == ground_cap and director.flyer_cap() == flyer_cap, "the flyer cap is half the ground cap")
+	game.balance.active_limit = ground_cap + 26
+	player.hp = 100000.0
 	game.core.max_hp = 100000.0
 	game.core.hp = game.core.max_hp
 	for section: AsterStructure in game.walls:
@@ -832,8 +941,11 @@ func _cap_and_replacements() -> void:
 		highest = maxi(highest, director.enemies.size())
 		if highest >= cap:
 			break
-	_expect(highest == cap and director.enemies.size() == cap and director.active_cap() == cap, "maximum-pressure siege fills but never exceeds the hard cap")
-	_expect(director.spawn_enemy(Vector3(0, 0, 65)) == null, "direct spawning also enforces the active cap")
+	_expect(highest == cap and director.enemies.size() == cap and director.flyer_count == flyer_cap,
+		"maximum-pressure siege fills both independent caps")
+	var point := Vector3(0, 0, 65)
+	_expect(director.spawn_enemy(point) == null and director.spawn_enemy(point, AsterBug.Kind.FLYER) == null,
+		"direct spawning enforces both caps")
 	for index in range(7):
 		var bug: AsterBug = director.enemies[0]
 		bug.damage(bug.hp)
@@ -841,7 +953,8 @@ func _cap_and_replacements() -> void:
 		if director.enemies.size() == cap:
 			break
 		await physics_frame
-	_expect(director.enemies.size() == cap and game.kills == 7, "continuous replacements refill freed slots only")
+	_expect(director.enemies.size() == cap and director.flyer_count == flyer_cap and game.kills == 7,
+		"continuous replacements refill freed ground and air slots")
 	_expect(game.combat_points == 105, "seven kills award only the base reward")
 	for index in range(2):
 		var bug: AsterBug = director.enemies[0]
@@ -884,8 +997,10 @@ func _close_pairs(actors: Array[AsterBug]) -> int:
 
 func _screen_when_scouting() -> void:
 	_hold_fire()
+	player.hp = 100000.0
 	await _warp(Vector3(10.0, 0.10, 70.0))
 	var observed := {}
+	var seen_flyers := false
 	var truly_hidden := true
 	for index in range(920):
 		await physics_frame
@@ -894,22 +1009,46 @@ func _screen_when_scouting() -> void:
 			if observed.has(id):
 				continue
 			observed[id] = true
+			seen_flyers = seen_flyers or bug is AsterFlyingBug
 			var ray := AsterArt.ray(player.get_world_3d(), player.eye.global_position, bug.global_position, AsterArt.SPAWN_SCREEN)
 			truly_hidden = truly_hidden and not ray.is_empty() and bug.global_position.distance_to(player.global_position) >= AsterAssault.MIN_SPAWN_DISTANCE - 0.1
 	_expect(observed.size() >= 7, "the siege finds alternative hidden positions while the player scouts beyond the ridges")
+	_expect(seen_flyers, "flyers can spawn while the player scouts beyond their usual side of the ridges")
 	_expect(truly_hidden, "scouting never revealed an enemy appearing in direct sight")
 
 func _turret_visibility() -> void:
 	var left: AsterTurret = game.turrets[0]
 	_hold_fire(left)
-	var enemy: AsterBug = game.assault.spawn_enemy(Vector3(5.55, 0.06, -7.9))
+	game.balance.turret_range = 115.0
+	var director: AsterAssault = game.assault
+	var cave := PackedVector3Array()
+	for attempt in range(25):
+		for route in director._scatter(6):
+			if route[0].z > AsterTerrain.CAVE_MOUTH.z:
+				cave = route
+				break
+		if not cave.is_empty():
+			break
+	_expect(not cave.is_empty(), "automatic siege uses the screened cave passage")
+	if cave.is_empty():
+		return
+	var enemy := director.spawn_enemy(cave[0])
 	enemy.set_physics_process(false)
 	enemy.hp = 1000
+	var screened := true
+	for turret: AsterTurret in game.turrets:
+		screened = screened and not AsterArt.ray(player.get_world_3d(), turret.attack_position(), enemy.hit_point(), AsterArt.SOLID).is_empty()
 	await _frames(100)
-	_expect(left.shots_fired == 0 and enemy.hp == 1000, "turret is blocked by main building")
+	_expect(screened and left.shots_fired == 0 and enemy.hp == 1000, "rock blocks fire from the turrets into the cave spawn")
 	enemy.global_position = left.wall.global_position + left.wall.outward * 9.0 + Vector3.UP * 0.04
 	await _frames(95)
 	_expect(left.shots_fired > 0 and enemy.hp < 1000, "same target becomes eligible after entering clear range")
+	_hold_fire()
+	enemy.global_position = cave[0]
+	enemy.set_entry_path(cave.slice(1))
+	enemy.set_physics_process(true)
+	await _frames(1060)
+	_expect(enemy.state != &"incoming" and enemy.global_position.z < 39.0, "a cave attacker rounds the bend and crosses the screening ridges")
 
 func _navigation() -> void:
 	var left: AsterTurret = game.turrets[0]
@@ -921,8 +1060,8 @@ func _navigation() -> void:
 	_expect(ground.state == &"approach" and side.hp < side.max_hp and ground.global_position.z > 12.4, "ground bug stops at and damages solid wall")
 	await _warp(Vector3(-9.1, 0.08, -6.0))
 	side.damage(side.hp)
-	await _frames(250)
-	_expect(ground.state == &"inside" and ground.global_position.z < 11.8 and game.core.hp < game.core.max_hp, "ground bug crosses breach and attacks core")
+	await _frames(480)
+	_expect(ground.state == &"inside" and ground.global_position.z < 11.8 and game.core.hp < game.core.max_hp, "ground bug crosses the breach and attacks the bunker gate")
 	ground.damage(ground.hp)
 	var climber: AsterBug = game.assault.spawn_enemy(left.wall.global_position + left.wall.outward * 7.0 + Vector3.UP * 0.04, AsterBug.Kind.CLIMBER)
 	var ascended := false
@@ -978,7 +1117,8 @@ func _respawn() -> void:
 	player.damage(player.hp)
 	game.core.damage(game.core.hp)
 	await _frames(320)
-	_expect(game.lost and not player.alive and game.points == game.balance.respawn_points and "здание" in game.loss_reason, "core loss overrides an outstanding respawn")
+	_expect(game.lost and not player.alive and game.points == game.balance.respawn_points and "Ворота бункера" in game.loss_reason,
+		"destruction of the bunker gate ends the match during respawn")
 	game.combat_points = 345
 	game.turret_tuning.apply_upgrade(AsterTurretTuning.Path.DAMAGE)
 	game.restart()
@@ -990,11 +1130,14 @@ func _respawn() -> void:
 
 func _main_menu_flow() -> void:
 	var home_scene := "res://scenes/main_menu.tscn"
-	_expect(ProjectSettings.get_setting("application/run/main_scene") == home_scene, "application starts at the main menu")
-	change_scene_to_file(home_scene)
+	var loading_scene := "res://scenes/loading.tscn"
+	_expect(ProjectSettings.get_setting("application/run/main_scene") == loading_scene and ProjectSettings.get_setting("application/boot_splash/image") == "res://assets/aster.png", "application starts with the Aster splash and loading screen")
+	change_scene_to_file(loading_scene)
+	await scene_changed
+	_expect(current_scene.target_scene == home_scene and current_scene._progress.indeterminate, "startup loading screen prepares the main menu")
 	await scene_changed
 	var menu := current_scene
-	_expect(menu._home.visible and not menu._settings.visible and [menu._start.text, menu._options.text, menu._exit.text] == ["Начать игру", "Настройки", "Выход"], "startup presents the three requested controls")
+	_expect(menu._home.visible and not menu._settings.visible and [menu._start.text, menu._map_review.text, menu._options.text, menu._exit.text] == ["Начать игру", "Разметка карты", "Настройки", "Выход"], "startup offers the game, map review, settings, and exit")
 	var original_sensitivity := AsterSettings.sensitivity
 	var original_volume := AsterSettings.volume
 	menu._options.pressed.emit()
@@ -1004,8 +1147,10 @@ func _main_menu_flow() -> void:
 	menu._mouse.value = original_sensitivity
 	menu._volume.value = original_volume
 	menu._back.pressed.emit()
-	_expect(menu._home.visible and not menu._settings.visible, "settings return to the three-button menu")
+	_expect(menu._home.visible and not menu._settings.visible, "settings return to the main menu")
 	menu._start.pressed.emit()
+	await scene_changed
+	_expect(current_scene.scene_file_path == loading_scene and current_scene.target_scene == "res://scenes/outpost.tscn", "start shows the outpost loading screen")
 	await scene_changed
 	game = current_scene
 	await _frames(58)

@@ -1,8 +1,6 @@
 extends SceneTree
 
 const STORE := "res://assets/art/materials/"
-const TILES := [&"dust", &"strata", &"concrete", &"alloy"]
-const NORMAL_STRENGTH := [1.45, 2.65, 1.77, 1.16]
 const WORKSHOP_TILES := [&"parkerized", &"painted", &"polymer", &"armory"]
 const WORKSHOP_NORMAL := [1.18, 1.45, 1.20, 2.02]
 const WORKSHOP_ROUGHNESS := [0.50, 0.67, 0.72, 0.86]
@@ -23,16 +21,7 @@ func _initialize() -> void:
 		elif arguments[0] == "--canyon-atlas":
 			_bake_atlas(textures, "canyon_", CANYON_TILES, CANYON_NORMAL, CANYON_ROUGHNESS)
 		else:
-			_bake_atlas(textures, "field_")
-		quit()
-		return
-	if arguments.size() == 2 and arguments[0] == "--amber-panorama":
-		var amber := Image.load_from_file(arguments[1])
-		if amber == null or amber.is_empty():
-			printerr("Could not decode the amber panorama.")
-			quit(1)
-			return
-		_panorama(amber, "amber_panorama.jpg", 0.82)
+			_bake_tile(textures, 3, "field_alloy", 1.16)
 		quit()
 		return
 	if arguments.size() == 1:
@@ -41,43 +30,35 @@ func _initialize() -> void:
 			printerr("Could not decode the daytime panorama.")
 			quit(1)
 			return
-		_panorama(daylight, "day_panorama.jpg")
+		_panorama(daylight)
 		quit()
 		return
-	if arguments.size() != 2:
-		printerr("Provide the four-tile atlas and the panorama PNG as arguments.")
-		quit(2)
-		return
-	var atlas := Image.load_from_file(arguments[0])
-	var panorama := Image.load_from_file(arguments[1])
-	if atlas == null or atlas.is_empty() or panorama == null or panorama.is_empty():
-		printerr("Could not decode the generated source textures.")
-		quit(1)
-		return
-	_bake_atlas(atlas)
-	_panorama(panorama, "dusk_panorama.jpg")
-	quit()
+	printerr("Provide a panorama image or an atlas with --field-atlas, --workshop-atlas or --canyon-atlas.")
+	quit(2)
 
-func _bake_atlas(atlas: Image, prefix := "", names: Array = TILES, strengths: Array = NORMAL_STRENGTH, roughness: Array = []) -> void:
+func _bake_atlas(atlas: Image, prefix: String, names: Array, strengths: Array, roughness: Array) -> void:
+	for index in range(names.size()):
+		_bake_tile(atlas, index, prefix + String(names[index]), strengths[index], roughness[index])
+
+func _bake_tile(atlas: Image, index: int, filename: String, normal_strength: float, roughness := -1.0) -> void:
 	var half := atlas.get_size() / 2
 	var inset := Vector2i(12, 12)
-	for index in range(names.size()):
-		var origin := Vector2i(index % 2 * half.x, (index >> 1) * half.y)
-		var tile := atlas.get_region(Rect2i(origin + inset, half - inset * 2))
-		tile.convert(Image.FORMAT_RGB8)
-		tile.resize(512, 512, Image.INTERPOLATE_LANCZOS)
-		_match_edges(tile, false, 29)
-		_match_edges(tile, true, 29)
-		var normals := tile.duplicate()
-		normals.bump_map_to_normal_map(strengths[index])
-		_save(normals, prefix + names[index] + "_normal.png")
-		if not roughness.is_empty():
-			_save(_roughness_map(tile, roughness[index]), prefix + names[index] + "_roughness.png")
-		if names[index] == &"alloy":
-			for y in range(tile.get_height()):
-				for x in range(tile.get_width()):
-					tile.set_pixel(x, y, tile.get_pixel(x, y).lerp(Color.WHITE, 0.55))
-		_save(tile, prefix + names[index] + ".jpg")
+	var origin := Vector2i(index % 2 * half.x, (index >> 1) * half.y)
+	var tile := atlas.get_region(Rect2i(origin + inset, half - inset * 2))
+	tile.convert(Image.FORMAT_RGB8)
+	tile.resize(512, 512, Image.INTERPOLATE_LANCZOS)
+	_match_edges(tile, false, 29)
+	_match_edges(tile, true, 29)
+	var normals := tile.duplicate()
+	normals.bump_map_to_normal_map(normal_strength)
+	_save(normals, filename + "_normal.png")
+	if roughness >= 0.0:
+		_save(_roughness_map(tile, roughness), filename + "_roughness.png")
+	if filename == "field_alloy":
+		for y in range(tile.get_height()):
+			for x in range(tile.get_width()):
+				tile.set_pixel(x, y, tile.get_pixel(x, y).lerp(Color.WHITE, 0.55))
+	_save(tile, filename + ".jpg")
 
 func _roughness_map(albedo: Image, baseline: float) -> Image:
 	var result := Image.create_empty(albedo.get_width(), albedo.get_height(), false, Image.FORMAT_L8)
@@ -91,17 +72,11 @@ func _roughness_map(albedo: Image, baseline: float) -> Image:
 			result.set_pixel(x, y, Color(grain, grain, grain))
 	return result
 
-func _panorama(image: Image, filename: String, saturation := 1.0) -> void:
+func _panorama(image: Image) -> void:
 	image.convert(Image.FORMAT_RGB8)
 	image.resize(1536, 768, Image.INTERPOLATE_LANCZOS)
-	if saturation < 1.0:
-		for y in range(image.get_height()):
-			for x in range(image.get_width()):
-				var color := image.get_pixel(x, y)
-				var luma := color.get_luminance()
-				image.set_pixel(x, y, Color(luma, luma, luma).lerp(color, saturation))
 	_match_edges(image, false, 74)
-	_save(image, filename)
+	_save(image, "day_panorama.jpg")
 
 func _match_edges(image: Image, vertical: bool, width: int) -> void:
 	var depth := image.get_height() if vertical else image.get_width()

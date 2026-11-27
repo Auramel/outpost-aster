@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dqwe5pn4cwntj"
-path="res://.godot/imported/field_strata_normal.png-aebb407437379fe91ede9a7052ef0ad7.ctex"
+uid="uid://bvreptmu4piri"
+path="res://.godot/imported/dune_wing.png-3cd44dbd0dfcee0cff933c3cdc550458.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/materials/field_strata_normal.png"
-dest_files=["res://.godot/imported/field_strata_normal.png-aebb407437379fe91ede9a7052ef0ad7.ctex"]
+source_file="res://assets/art/materials/dune_wing.png"
+dest_files=["res://.godot/imported/dune_wing.png-3cd44dbd0dfcee0cff933c3cdc550458.ctex"]
 
 [params]
 
@@ -23,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

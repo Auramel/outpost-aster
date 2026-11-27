@@ -258,7 +258,7 @@ func _update() -> void:
 	if replaced:
 		_service.value = player.interaction.elapsed / player.interaction.duration
 	_context.get_parent().get_parent().visible = not _context.text.is_empty()
-	_warning.text = "Главное здание атакуют" if game.core.attacked > 0.0 else ""
+	_warning.text = "Ворота бункера атакуют" if game.core.attacked > 0.0 else ""
 	_notice.text = game.message if game.message_left > 0.0 else ""
 	_warning.visible = not _warning.text.is_empty()
 	_notice.visible = not _notice.text.is_empty()

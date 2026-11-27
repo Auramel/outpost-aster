@@ -1,6 +1,8 @@
 extends Control
 
 const OUTPOST := "res://scenes/outpost.tscn"
+const MAP_REVIEW := "res://scenes/map_review.tscn"
+const LOADING := "res://scenes/loading.tscn"
 const BACKDROP := preload("res://assets/art/menu_outpost.jpg")
 const INK := Color("#f4e7d4")
 const MUTED := Color("#c1b7a9")
@@ -9,6 +11,7 @@ const AMBER := Color("#f2ac68")
 var _home: VBoxContainer
 var _settings: VBoxContainer
 var _start: Button
+var _map_review: Button
 var _options: Button
 var _exit: Button
 var _back: Button
@@ -75,6 +78,8 @@ func _make_home() -> void:
 	_spacer(_home, 20.0)
 	_start = _button(_home, "Начать игру", true)
 	_start.pressed.connect(_start_game)
+	_map_review = _button(_home, "Разметка карты")
+	_map_review.pressed.connect(_open_map_review)
 	_options = _button(_home, "Настройки")
 	_options.pressed.connect(_show_settings.bind(true))
 	_exit = _button(_home, "Выход")
@@ -116,7 +121,13 @@ func _make_settings() -> void:
 
 func _start_game() -> void:
 	AsterSettings.save()
-	get_tree().change_scene_to_file(OUTPOST)
+	var loading := (load(LOADING) as PackedScene).instantiate()
+	loading.target_scene = OUTPOST
+	loading.loading_text = "Загрузка форпоста"
+	get_tree().change_scene_to_node(loading)
+
+func _open_map_review() -> void:
+	get_tree().change_scene_to_file(MAP_REVIEW)
 
 func _quit_game() -> void:
 	AsterSettings.save()

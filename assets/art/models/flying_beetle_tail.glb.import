@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://cwws5fvq1h5wa"
-path="res://.godot/imported/sandstone_screen.glb-bc57984e095d4fc09771affef5f58068.scn"
+uid="uid://c4m43wqvfpup4"
+path="res://.godot/imported/flying_beetle_tail.glb-f67fa0cf62a80ba0f1369ac190b126cd.scn"
 
 [deps]
 
-source_file="res://assets/art/models/sandstone_screen.glb"
-dest_files=["res://.godot/imported/sandstone_screen.glb-bc57984e095d4fc09771affef5f58068.scn"]
+source_file="res://assets/art/models/flying_beetle_tail.glb"
+dest_files=["res://.godot/imported/flying_beetle_tail.glb-f67fa0cf62a80ba0f1369ac190b126cd.scn"]
 
 [params]
 

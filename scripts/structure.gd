@@ -10,7 +10,8 @@ const OUTER_FACE := 0.39
 const WALL_CENTER := OUTER_FACE - WALL_DEPTH * 0.5
 const INSIDE_CLEARANCE := WALL_DEPTH - OUTER_FACE + 0.74
 const GATE_PANEL_DEPTH := 0.78
-const CORE_HALF := Vector3(2.62, 0.0, 2.25)
+const CORE_HALF := Vector3(2.47, 0.0, 0.48)
+const CORE_HEIGHT := 4.10
 
 var title: String
 var hp: float
@@ -51,11 +52,10 @@ func setup(settings: AsterBalance, label: String, direction: Vector3 = Vector3.Z
 		_build_gate()
 	else:
 		_build_wall()
-	if not is_core:
-		_damage_stages = AsterWallDamage.build(_damage_visual, is_gate)
+	_damage_stages = AsterWallDamage.build(_damage_visual, is_gate or is_core)
 	status_tag = AsterStatusTag.new()
 	add_child(status_tag)
-	var caption := "УЗЕЛ СВЯЗИ" if is_core else title.trim_prefix("Секция ").to_upper()
+	var caption := title.trim_prefix("Секция ").to_upper()
 	status_tag.setup(caption)
 	_refresh()
 
@@ -101,13 +101,16 @@ func _build_parapet(visual: Node3D) -> void:
 		AsterArt.box(visual, Vector3(0.82, 0.083, 0.45), center + Vector3.UP * 0.24, AsterArt.DARK)
 
 func _build_core() -> void:
-	ceiling = 4.1
-	_solid = AsterArt.collider(self, Vector3(CORE_HALF.x * 2.0, 4.0, CORE_HALF.z * 2.0), Vector3(0, 2, 0), AsterArt.SOLID, self)
-	AsterModels.attach(_body_visual, &"relay")
-	AsterArt.collider(self, Vector3(3.29, 2.52, 3.20), Vector3(0, 5.24, -0.045), AsterArt.SOLID, self)
-	AsterArt.collider(self, Vector3(4.68, 1.39, 3.38), Vector3(0, 7.44, -0.09), AsterArt.SOLID, self)
-	AsterArt.lettering(self, "01  /  УЗЕЛ СВЯЗИ", Vector3(0, 2.83, 2.33), 27, AsterArt.CYAN)
-	AsterArt.box(_damage_visual, Vector3(1.70, 0.12, 0.03), Vector3(0, 3.24, 2.295), AsterArt.RED, true)
+	ceiling = CORE_HEIGHT
+	var size := Vector3(CORE_HALF.x * 2.0, ceiling, CORE_HALF.z * 2.0)
+	_solid = AsterArt.collider(self, size, Vector3.UP * ceiling * 0.5, AsterArt.SOLID, self)
+	AsterModels.attach(self, &"gate_frame", Vector3.ZERO, Vector3(1.40, 1.31, 1.0))
+	AsterModels.attach(_body_visual, &"gate_panels", Vector3.ZERO, Vector3(1.40, 1.32, 1.0))
+	AsterModels.attach(_rubble, &"breach", Vector3.ZERO, Vector3(1.40, 1.1, 1.15))
+	_damage_visual.scale = Vector3(1.4, 1.32, 1.0)
+	AsterArt.lettering(self, "ГЕРМОШЛЮЗ", Vector3(0, 4.37, 0.63), 30, AsterArt.CYAN)
+	for side: float in [-1.0, 1.0]:
+		AsterArt.box(self, Vector3(0.105, 0.48, 0.04), Vector3(side * 2.62, 2.62, 0.61), AsterArt.AMBER, true)
 
 func damage(amount: float) -> void:
 	if hp <= 0.0:
@@ -115,11 +118,10 @@ func damage(amount: float) -> void:
 	attacked = 1.25
 	hp = maxf(0.0, hp - amount)
 	if hp == 0.0:
-		if not is_core:
-			gate_open = false
-			_set_blocking(false)
-			if is_instance_valid(support):
-				support.destroy()
+		gate_open = false
+		_set_blocking(false)
+		if is_instance_valid(support):
+			support.destroy()
 		destroyed.emit(self)
 	_refresh()
 
@@ -158,8 +160,8 @@ func _refresh() -> void:
 	if hp <= 0.0:
 		warning = "РАЗРУШЕНО" if is_core else "ПРОЛОМ"
 	if is_core:
-		tag_y = 4.30
-		status_tag.position.z = 2.43
+		tag_y = 4.94
+		status_tag.position.z = 2.14
 	elif is_gate:
 		tag_y = 4.10
 		if gate_open:
@@ -168,9 +170,8 @@ func _refresh() -> void:
 		tag_y = 0.95
 	status_tag.position.y = tag_y
 	status_tag.set_values(hp / max_hp, 0.0, warning)
-	if not is_core:
-		_body_visual.visible = blocking
-		_rubble.visible = not blocking and not gate_open
+	_body_visual.visible = blocking
+	_rubble.visible = not blocking and not gate_open
 	var fraction := hp / max_hp
 	damage_stage = 4 if hp <= 0.0 else 0
 	if hp > 0.0:
@@ -180,7 +181,7 @@ func _refresh() -> void:
 			damage_stage = 2
 		elif fraction <= 0.83:
 			damage_stage = 1
-	_damage_visual.visible = blocking and (fraction < 0.65 if is_core else damage_stage > 0)
+	_damage_visual.visible = blocking and damage_stage > 0
 	for index in range(_damage_stages.size()):
 		_damage_stages[index].visible = index < damage_stage
 	if is_gate:

@@ -15,7 +15,7 @@ func _measure() -> void:
 	game = GAME.instantiate()
 	game.balance = game.balance.duplicate()
 	if requested > 0:
-		game.balance.active_limit = clampi(requested, 1, AsterAssault.ACTIVE_CAP)
+		game.balance.active_limit = clampi(requested, 1, AsterAssault.GROUND_CAP)
 	root.add_child(game)
 	if "--max-turrets" in arguments:
 		for path in range(AsterTurretTuning.Path.size()):
@@ -24,7 +24,7 @@ func _measure() -> void:
 		for mount: AsterTurret in game.turrets:
 			mount.rounds = mount.capacity()
 	var assault: AsterAssault = game.assault
-	var stress_count := assault.active_cap()
+	var ground_count := assault.ground_cap()
 	seed(723)
 	assault._rng.seed = 723
 	current_scene = game
@@ -44,22 +44,25 @@ func _measure() -> void:
 	player.rotation.y = PI + 0.25
 	player.eye.rotation.x = -0.19
 	const LANES := 18
-	for index in range(stress_count):
-		var lane := index % LANES
-		var row := floori(float(index) / LANES)
+	for index in range(assault.active_cap()):
+		var flying := index >= ground_count
+		var slot := index - ground_count if flying else index
+		var lane := slot % LANES
+		var row := floori(float(slot) / LANES)
 		var angle := lerpf(-0.99, 0.99, (lane + 0.5) / LANES)
 		var radius := 15.8 + row * 4.1 + randf_range(-0.62, 0.62)
 		var at := Vector3(
 			sin(angle) * radius + randf_range(-0.40, 0.40),
-			0.06,
+			5.6 + row * 0.9 if flying else 0.06,
 			AsterTerrain.FRONT_Z + cos(angle) * radius * 0.84 + 4.35)
-		var bug := assault.spawn_enemy(at)
+		var kind := AsterBug.Kind.FLYER if flying else AsterBug.Kind.GROUND
+		var bug := assault.spawn_enemy(at, kind)
 		bug.hp = 10000.0
+	game.player.hp = 30000
 	game.assault.set_physics_process(true)
 	await create_timer(1.7).timeout
 	if "--no-capture" not in arguments:
 		await _capture("aster-combat")
-	game.player.hp = 30000
 	await create_timer(1.0).timeout
 	var since := Time.get_ticks_usec()
 	var previous := since

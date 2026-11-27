@@ -21,10 +21,10 @@ MATERIALS = {
     "Concrete": ("bdc4c2", 0.0, 0.87),
     "Rock": ("dcba94", 0.0, 0.91),
     "StoneDark": ("aa896d", 0.0, 0.94),
-    "DuneChitin": ("dedee0", 0.04, 0.57),
-    "DuneSinew": ("35343a", 0.0, 0.70),
-    "DuneEyeLamp": ("ad6448", 0.0, 0.41, 0.55),
-    "DuneSporeLamp": ("9ade55", 0.0, 0.39, 1.0),
+    "DuneChitin": ("f4e9dd", 0.03, 0.51),
+    "DuneSinew": ("583b29", 0.0, 0.70),
+    "DuneEyeLamp": ("d8973a", 0.0, 0.41, 0.55),
+    "DuneWing": ("ffffff", 0.0, 0.47),
     "IceLamp": ("78dcff", 0.0, 0.55, 0.8),
     "AmberLamp": ("ffc47c", 0.0, 0.54, 0.55),
     "CarbineSatin": ("a8b7c7", 0.45, 0.43),
@@ -619,7 +619,7 @@ def turret_wreck():
 
 
 def cuticle_loft(model, sections, *, sides=10, up=(0, 1, 0), axis=None,
-                  uv_span=(0.0, 1.0), lip=False, crest=0.0):
+                  uv_span=(0.0, 1.0), lip=False, ridged=False, finish="DuneChitin"):
     """Sweep a fitted section along an anatomical curve, with its UVs following the growth rings."""
     rings = []
     for index, (center, width, height) in enumerate(sections):
@@ -635,10 +635,11 @@ def cuticle_loft(model, sections, *, sides=10, up=(0, 1, 0), axis=None,
         for spoke in range(sides):
             angle = 2 * pi * spoke / sides
             x, y = sin(angle), cos(angle)
+            if ridged and y > 0:
+                y = (1 - abs(x)) ** .88
             if lip:
                 x *= 1.11 - 0.11 * abs(y)
                 y *= 1.0 if y >= 0 else 0.55
-            y += crest * max(0, y) ** 8
             row.append(add(center, add(mul(across, width * x), mul(crown, height * y))))
         rings.append(row)
 
@@ -662,57 +663,69 @@ def cuticle_loft(model, sections, *, sides=10, up=(0, 1, 0), axis=None,
             u0, u1 = spoke / sides, (spoke + 1) / sides
             va = v0 + (v1 - v0) * index / (len(rings) - 1)
             vb = v0 + (v1 - v0) * (index + 1) / (len(rings) - 1)
-            model.face("DuneChitin", points, mean(face_normals), face_normals, [(u0, va), (u1, va), (u1, vb), (u0, vb)])
+            model.face(finish, points, mean(face_normals), face_normals, [(u0, va), (u1, va), (u1, vb), (u0, vb)])
     for index, neighbor in ((0, 1), (-1, -2)):
         face_direction = sub(sections[index][0], sections[neighbor][0])
         cap_uv = [(.54 + sin(2 * pi * spoke / sides) * .045, .53 + cos(2 * pi * spoke / sides) * .045)
                   for spoke in range(sides)]
-        model.face("DuneChitin", rings[index], face_direction, uv=cap_uv)
+        model.face(finish, rings[index], face_direction, uv=cap_uv)
 
 
 def beetle():
     model = Model("dune_beetle", 1.9)
-    # Angular bonnet with a hooked prow and a thick, everted rear edge.
+    # The carapace widens from a narrow brow to two swept-back shoulder points.
     cuticle_loft(model, [
-        ((0, .537, -1.035), .063, .030), ((0, .568, -.924), .188, .091),
-        ((0, .614, -.736), .277, .131), ((0, .675, -.439), .348, .188),
-        ((0, .727, -.142), .451, .238), ((0, .743, .182), .495, .267),
-        ((0, .722, .421), .462, .231), ((0, .680, .615), .348, .178),
-        ((0, .657, .734), .186, .092),
-    ], sides=20, axis=(0, 0, 1), lip=True, crest=.12, uv_span=(.02, .98))
-    model.ellipsoid("DuneSinew", (0, .520, -.057), (.352, .197, .625), sides=14, rows=6)
-    model.ellipsoid("DuneSinew", (0, .430, -.735), (.192, .099, .244), sides=12, rows=5)
+        ((0, .552, -1.093), .006, .006), ((0, .570, -1.013), .097, .053),
+        ((0, .595, -.816), .190, .140), ((0, .626, -.532), .302, .233),
+        ((0, .661, -.220), .420, .325), ((0, .700, .110), .544, .406),
+        ((0, .749, .360), .611, .455), ((0, .746, .446), .630, .371),
+        ((0, .718, .512), .551, .235), ((0, .686, .625), .368, .129),
+        ((0, .681, .741), .190, .075),
+    ], sides=16, axis=(0, 0, 1), lip=True, ridged=True, uv_span=(.02, .98))
+    model.ellipsoid("DuneSinew", (0, .518, .051), (.395, .239, .653), sides=16, rows=8)
+    model.ellipsoid("DuneSinew", (0, .477, -.667), (.251, .143, .301), sides=12, rows=6)
     for side in (-1, 1):
-        # Serrated shoulder shield, behind the single continuous forehead plate.
+        # The flank plates sit under the lip so the triangular brow stays continuous.
         cuticle_loft(model, [
-            ((side * .271, .545, -.343), .066, .043),
-            ((side * .422, .615, -.083), .104, .085),
-            ((side * .486, .667, .205), .084, .120),
-            ((side * .393, .694, .478), .080, .101),
-            ((side * .360, .758 + side * .018, .634), .031, .040),
-            ((side * .399, .779 + side * .031, .735), .003, .005),
-        ], sides=8, uv_span=(.11, .86), lip=True)
-        for index in range(3):
-            z = -.29 + index * .175
+            ((side * .210, .496, -.711), .032, .034),
+            ((side * .322, .535, -.415), .074, .072),
+            ((side * .413, .574, -.052), .097, .122),
+            ((side * .478, .620, .287), .105, .133),
+            ((side * .523, .679, .497), .073, .086),
+            ((side * .640, .756, .581), .002, .003),
+        ], sides=8, uv_span=(.11, .86), lip=True, ridged=True)
+        for index in range(5):
+            z = -.51 + index * .219
+            x = .261 + index * .032
             cuticle_loft(model, [
-                ((side * .175, .412, z - .054), .040, .025),
-                ((side * (.338 + index * .016), .487, z), .077, .044),
-                ((side * (.397 + index * .011), .585, z + .068), .033, .031),
-            ], sides=7, uv_span=(.39, .58))
-        # Optical slit behind the distinct three-prong mouth cage.
-        a = (side * .167, .555, -.897)
-        b = (side * .229, .569, -.774)
-        model.tube("DuneEyeLamp", a, b, .018, .024, 8, section=(.66, 1.0))
-        for inset in (0.0, .057):
+                ((side * x, .338, z + .042), .034, .028),
+                ((side * (x + .091), .414, z + .017), .064, .048),
+                ((side * (x + .110), .508, z + .084), .061, .045),
+                ((side * (x + .099), .574, z + .178), .014, .014),
+            ], sides=8, uv_span=(.30 + index * .077, .64 + index * .052))
+        for x, y, z in ((.260, .538, -.535), (.315, .579, -.155), (.295, .573, .403)):
+            model.ellipsoid("DuneSinew", (side * x, y - .023, z), (.121, .115, .125), sides=10, rows=5)
+        # A narrow amber eye sits between the brow and hooked mandibles.
+        a = (side * .135, .533, -.938)
+        b = (side * .203, .565, -.786)
+        model.tube("DuneSinew", a, b, .034, .040, 8, section=(.83, .66))
+        cuticle_loft(model, [
+            ((side * .150, .541, -.940), .003, .003),
+            ((side * .185, .543, -.880), .013, .014),
+            ((side * .215, .553, -.817), .020, .013),
+            ((side * .225, .562, -.788), .004, .004),
+        ], sides=8, finish="DuneEyeLamp")
+        for inset in (0.0, .069):
             cuticle_loft(model, [
-                ((side * (.237 - inset), .513, -.712), .061, .062),
-                ((side * (.218 - inset), .443, -.846), .049, .053),
-                ((side * (.155 - inset * .70), .384, -.988), .039, .026),
-                ((side * (.091 - inset * .42), .426, -1.072 + inset), .003, .004),
-            ], sides=8, uv_span=(.28, .85))
+                ((side * (.247 - inset), .469, -.702), .060, .068),
+                ((side * (.244 - inset), .430, -.806), .060, .055),
+                ((side * (.211 - inset), .392, -.904), .048, .043),
+                ((side * (.161 - inset * .77), .344 + inset * .33, -1.006), .028, .027),
+                ((side * (.085 - inset * .52), .297 + inset, -1.127 + inset), .002, .004),
+            ], sides=8, uv_span=(.34, .87), lip=True, ridged=True)
     cuticle_loft(model, [
-        ((0, .436, -.832), .052, .046), ((0, .363, -.961), .042, .026),
-        ((0, .381, -1.068), .002, .003),
+        ((0, .467, -.814), .062, .059), ((0, .403, -.941), .050, .034),
+        ((0, .323, -1.049), .027, .028), ((0, .299, -1.096), .002, .003),
     ], sides=8, uv_span=(.32, .80))
     return model
 
@@ -722,75 +735,186 @@ def beetle_leg(side, foreclaw=False):
     part = "claw" if foreclaw else "leg"
     model = Model(f"beetle_{part}_{suffix}", 2.1)
     if foreclaw:
-        arm = [(0, .014, 0), (.207, -.048, -.089), (.365, .035, -.161), (.459, .165, -.258)]
-        edge = [(.406, .093, -.209), (.489, .162, -.291), (.561, .062, -.424),
-                (.628, -.152, -.521), (.693, -.390, -.607), (.678, -.544, -.668)]
+        arm = [(0, .014, 0), (.146, -.120, -.045), (.264, -.114, -.117),
+               (.387, .047, -.202), (.462, .174, -.263)]
+        edge = [(.466, .436, -.429), (.472, .295, -.337), (.492, .180, -.293),
+                (.569, .070, -.426), (.649, -.137, -.531), (.721, -.394, -.630), (.747, -.558, -.681)]
     else:
-        arm = [(0, .008, 0), (.189, -.099, .029), (.360, -.040, .069), (.536, .151, .134)]
-        edge = [(.481, .095, .106), (.562, .172, .143), (.658, .119, .115),
-                (.741, -.107, .052), (.810, -.353, -.025), (.779, -.574, -.141)]
+        arm = [(0, .008, 0), (.155, -.109, .021), (.295, -.116, .061),
+               (.414, .013, .098), (.536, .163, .139)]
+        edge = [(.536, .451, -.026), (.552, .296, .080), (.568, .183, .144),
+                (.657, .099, .126), (.744, -.102, .059), (.809, -.348, -.025), (.837, -.579, -.128)]
+
     def mirrored(point):
         return (side * point[0], point[1], point[2])
 
-    thigh = list(zip(map(mirrored, arm), (.077, .103, .082, .054), (.086, .100, .071, .055)))
-    tibia = list(zip(map(mirrored, edge), (.055, .092, .088, .070, .041, .003), (.064, .093, .106, .069, .046, .003)))
-    cuticle_loft(model, thigh, up=(0, 0, 1), uv_span=(.14, .57))
-    cuticle_loft(model, tibia, up=(0, 0, 1), uv_span=(.16, .92), lip=True)
-    # The outer spur breaks the long blade's silhouette without adding another moving part.
-    root = edge[2]
-    cuticle_loft(model, [
-        (mirrored(root), .047, .055),
-        (mirrored(add(root, (.044, .100, -.038))), .035, .029),
-        (mirrored(add(root, (.117, .181, -.060))), .002, .003),
-    ], sides=7, up=(0, 0, 1), uv_span=(.37, .78))
+    thigh = list(zip(map(mirrored, arm), (.080, .101, .081, .060, .066),
+                     (.091, .106, .088, .066, .073)))
+    tibia = list(zip(map(mirrored, edge), (.002, .044, .105, .116, .092, .051, .002),
+                     (.003, .039, .083, .104, .076, .036, .003)))
+    cuticle_loft(model, thigh, up=(0, 0, 1), uv_span=(.25, .71))
+    cuticle_loft(model, tibia, up=(0, 0, 1), uv_span=(.12, .92), lip=True, ridged=True)
+    for index, root in enumerate(edge[3:6]):
+        scale = 1.0 - .18 * index
+        offset = mul((.038, -.023, .075), scale)
+        cuticle_loft(model, [
+            (mirrored(sub(root, (.020, -.052, 0))), .051 * scale, .044 * scale),
+            (mirrored(add(root, offset)), .049 * scale, .036 * scale),
+            (mirrored(add(root, mul(offset, 1.63))), .002, .003),
+        ], sides=7, up=(0, 0, 1), uv_span=(.31 + index * .12, .54 + index * .12), ridged=True)
     return model
 
 
 def beetle_tail(upper=False):
     model = Model("beetle_sting" if upper else "beetle_tail", 2.2)
     if upper:
-        path = [(0, 0, 0), (0, .179, .028), (-.016, .347, -.010),
-                (-.033, .492, -.104), (-.055, .565, -.247), (-.061, .556, -.365)]
-        widths = [.109, .105, .094, .079, .069, .042]
+        path = [(0, -.043, -.006), (0, .162, .005), (-.012, .353, -.066),
+                (-.023, .520, -.201), (-.039, .633, -.380), (-.048, .669, -.568),
+                (-.051, .653, -.752), (-.052, .584, -.935)]
+        widths = [.148, .139, .132, .120, .111, .101, .093, .080]
     else:
-        path = [(0, 0, 0), (.004, -.010, .190), (0, .107, .342),
-                (0, .287, .465), (0, .48, .51)]
-        widths = [.155, .155, .146, .128, .114]
-    spine = [(center, radius * .74, radius * .61) for center, radius in zip(path, widths)]
+        path = [(0, -.020, -.042), (0, .015, .151), (0, .114, .306),
+                (0, .282, .438), (0, .480, .510)]
+        widths = [.198, .191, .176, .160, .144]
+    spine = [(center, radius * .75, radius * .71) for center, radius in zip(path, widths)]
     cuticle_loft(model, spine, up=(1, 0, 0), sides=8, uv_span=(.53, .85))
     for index, (base, tip) in enumerate(zip(path, path[1:])):
         width = widths[index]
+        along = norm(sub(tip, base))
+        outside = norm(cross((1, 0, 0), along))
+        mid = mix(base, tip, .48)
         cuticle_loft(model, [
-            (mix(base, tip, -.09), width * .70, width * .78),
-            (mix(base, tip, .27), width * .93, width * 1.08),
-            (mix(base, tip, .67), width * .86, width * 1.00),
-            (mix(base, tip, .88), width * .84, width * .96),
-            (mix(base, tip, .96), width * .71, width * .79),
+            (mix(base, tip, -.08), width * .80, width * .79),
+            (mix(base, tip, .27), width * .96, width * 1.00),
+            (mix(base, tip, .73), width * .85, width * .89),
+            (mix(base, tip, 1.05), width * .68, width * .73),
         ], up=(1, 0, 0), sides=10, uv_span=(.20 + index * .085, .34 + index * .085), lip=True)
-        if index in (1, 2):
-            sign = -1 if index == 1 else 1
-            flank = add(mix(base, tip, .78), (sign * width * .85, .012, width * .20))
-            cuticle_loft(model, [
-                (flank, .022, .029),
-                (add(flank, (sign * .022, .024, .039)), .020, .019),
-                (add(flank, (sign * .043, .067, .064)), .002, .003),
-            ], up=(1, 0, 0), sides=7, uv_span=(.37, .86))
-    if upper:
-        # Paired blades arch over separate recessed luminous sacs.
         for side in (-1, 1):
-            reach = -.618 if side < 0 else -.553
+            flank = add(mid, (side * width * .47, 0, 0))
             cuticle_loft(model, [
-                ((side * .014 - .049, .526, -.218), .077, .043),
-                ((side * .103 - .055, .569, -.374), .077, .047),
-                ((side * .130 - .060, .542, -.476), .045, .032),
-                ((side * .165 - .060, .494, reach), .002, .003),
-            ], sides=10, uv_span=(.48, .96))
-            model.ellipsoid("DuneSporeLamp", (side * .057 - .056, .503, -.376),
-                            (.047, .035, .092 if side > 0 else .109), sides=10, rows=6)
+                (add(flank, mul(along, width * .50)), width * .36, width * .23),
+                (add(flank, mul(outside, width * .57)), width * .51, width * .45),
+                (add(add(flank, mul(along, -width * .51)), mul(outside, width * .89)), width * .36, width * .36),
+                (add(add(flank, mul(along, -width * 1.26)), mul(outside, width * 1.31)), .002, .003),
+            ], up=outside, sides=8, uv_span=(.30 + index * .085, .54 + index * .085), lip=True, ridged=True)
+    if upper:
+        # Separate, long blades leave a gap at the end of the arch.
+        for side in (-1, 1):
+            reach = .066 if side < 0 else 0
+            cuticle_loft(model, [
+                ((side * .044 - .050, .611, -.856), .056, .059),
+                ((side * .099 - .051, .556, -.976), .055, .054),
+                ((side * .128 - .056, .489, -1.097), .091, .076),
+                ((side * .152 - .060, .402, -1.255), .081, .065),
+                ((side * .164 - .065, .293, -1.418), .046, .039),
+                ((side * .173 - .073, .182 - reach * .46, -1.572 - reach), .002, .003),
+            ], sides=12, uv_span=(.31, .94), lip=True, ridged=True)
+    return model
+
+
+def flying_beetle():
+    model = Model("flying_beetle", 2.1)
+    cuticle_loft(model, [
+        ((0, .594, -.906), .006, .006), ((0, .630, -.782), .130, .056),
+        ((0, .667, -.576), .235, .129), ((0, .681, -.348), .287, .195),
+        ((0, .681, -.094), .302, .229), ((0, .670, .192), .258, .206),
+        ((0, .640, .415), .204, .157), ((0, .616, .597), .125, .088),
+    ], sides=16, axis=(0, 0, 1), lip=True, ridged=True, uv_span=(.09, .92))
+    model.ellipsoid("DuneSinew", (0, .535, -.043), (.239, .158, .572), sides=14, rows=7)
+    for side in (-1, 1):
+        model.ellipsoid("DuneSinew", (side * .207, .709, -.079), (.111, .131, .167), sides=10, rows=6)
         cuticle_loft(model, [
-            ((-.057, .562, -.256), .088, .042), ((-.057, .577, -.405), .061, .032),
-            ((-.073, .537, -.534), .006, .005),
-        ], sides=8, uv_span=(.54, .90))
+            ((side * .169, .601, -.700), .005, .004),
+            ((side * .218, .615, -.621), .014, .017),
+            ((side * .253, .627, -.548), .016, .017),
+            ((side * .252, .641, -.493), .003, .004),
+        ], sides=8, finish="DuneEyeLamp")
+        for i in range(2):
+            inset = i * .067
+            cuticle_loft(model, [
+                ((side * (.202 - inset), .559, -.583), .047, .048),
+                ((side * (.230 - inset), .505, -.704), .051, .041),
+                ((side * (.189 - inset), .424, -.825), .039, .031),
+                ((side * (.132 - inset), .281 + .08 * i, -.950), .002, .004),
+            ], sides=8, lip=True, ridged=True, uv_span=(.24, .74))
+        for index, z in enumerate((-.32, -.01, .265)):
+            cuticle_loft(model, [
+                ((side * .15, .54, z), .043, .044),
+                ((side * .259, .393, z + .079), .055, .044),
+                ((side * .372, .327, z + .025), .046, .042),
+                ((side * .344, .219, z - .112), .024, .026),
+                ((side * (.259 - .029 * index), .075 + .025 * index, z - .230), .002, .003),
+            ], sides=8, lip=True, ridged=True, uv_span=(.24 + .07 * index, .74 + .06 * index))
+        for index in range(3):
+            z = .03 + index * .181
+            cuticle_loft(model, [
+                ((side * .169, .724 - .019 * index, z - .129), .050, .051),
+                ((side * .240, .719 - .027 * index, z), .073, .073),
+                ((side * .229, .690 - .030 * index, z + .106), .042, .048),
+                ((side * .181, .634 - .019 * index, z + .231), .002, .003),
+            ], sides=8, lip=True, ridged=True, uv_span=(.43, .85))
+    return model
+
+
+def flying_beetle_tail():
+    model = Model("flying_beetle_tail", 2.2)
+    path = [(0, .01, -.057), (0, -.046, .144), (0, -.171, .302), (.015, -.359, .386),
+            (.026, -.563, .390), (.037, -.758, .326), (.045, -.921, .193), (.051, -1.019, .025)]
+    widths = [.140, .144, .136, .119, .106, .088, .067, .043]
+    spine = [(point, radius * .64, radius * .62) for point, radius in zip(path, widths)]
+    cuticle_loft(model, spine, up=(1, 0, 0), sides=8, uv_span=(.51, .81), finish="DuneSinew")
+    for index, (base, tip) in enumerate(zip(path, path[1:])):
+        radius = widths[index]
+        outside = norm(cross(sub(tip, base), (1, 0, 0)))
+        cuticle_loft(model, [
+            (mix(base, tip, -.09), radius * .81, radius * .77),
+            (mix(base, tip, .23), radius, radius * .97),
+            (mix(base, tip, .79), radius * .91, radius * .85),
+            (add(mix(base, tip, 1.21), mul(outside, radius * .22)), radius * .50, radius * .48),
+            (add(mix(base, tip, 1.43), mul(outside, radius * .47)), .003, .004),
+        ], up=outside, sides=10, lip=True, ridged=True, uv_span=(.17 + .09 * index, .36 + .09 * index))
+    cuticle_loft(model, [
+        ((.047, -.982, .089), .040, .036), ((.052, -1.043, -.029), .069, .058),
+        ((.056, -1.105, -.168), .055, .047), ((.055, -1.146, -.298), .036, .029),
+        ((.053, -1.184, -.487), .002, .003),
+    ], sides=10, lip=True, ridged=True, uv_span=(.32, .93))
+    return model
+
+
+def flying_beetle_wing():
+    model = Model("flying_beetle_wing", 2.4)
+    sections = [
+        (.000, .008, .081, .000), (.235, -.081, .311, .068), (.536, -.186, .588, .113),
+        (.864, -.245, .793, .142), (1.208, -.239, .895, .167), (1.545, -.174, .910, .203),
+        (1.842, -.066, .856, .243), (2.093, .092, .748, .290), (2.291, .281, .648, .348),
+        (2.436, .496, .579, .420), (2.483, .555, .556, .449),
+    ]
+
+    def point(index, chord):
+        x, front, back, height = sections[index]
+        width = back - front
+        return (x, height + width * (.075 * sin(pi * chord) - .39 * chord), front + width * chord)
+
+    columns = 8
+    for index in range(len(sections) - 1):
+        for column in range(columns):
+            coordinates = [(index, column), (index + 1, column), (index + 1, column + 1), (index, column + 1)]
+            points = [point(row, chord / columns) for row, chord in coordinates]
+            uv = [(sections[row][0] / sections[-1][0], chord / columns) for row, chord in coordinates]
+            model.face("DuneWing", points, (0, 1, 0), uv=uv)
+    for fraction, end, bend, start_width in ((.0, 10, .0, .026), (.28, 10, .075, .016),
+                                             (.53, 9, -.080, .015), (.75, 8, -.058, .013), (.99, 6, -.04, .011)):
+        for index in range(end):
+            u, v = index / end, (index + 1) / end
+            a = point(index, fraction + bend * sin(pi * u))
+            b = point(index + 1, fraction + bend * sin(pi * v))
+            model.tube("DuneChitin", a, b, start_width * (1 - u) + .0035 * u, start_width * (1 - v) + .0025 * v, sides=6)
+    for start, end, section in ((.56, .97, 3), (.50, .96, 5), (.29, .72, 5), (.30, .61, 7), (.06, .32, 6)):
+        a = point(section, start)
+        b = point(section + 1, (start + end) * .5)
+        c = point(section + 2, end)
+        model.tube("DuneChitin", a, b, .0055, .0041, sides=5)
+        model.tube("DuneChitin", b, c, .0041, .0028, sides=5)
     return model
 
 
@@ -1129,90 +1253,6 @@ def breach():
     return m
 
 
-def watchtower():
-    m = Model("watchtower_frame", .54)
-    for x in (-1.32, 1.32):
-        for z in (-1.20, 1.20):
-            m.block("Concrete", (x, .19, z), (.80, .37, .76), .082, axis=1)
-            m.block("Graphite", (x, 3.72, z), (.262, 7.18, .258), .054)
-            m.block("Alloy", (x, .82, z), (.295, .91, .287), .059)
-            for y in (2.31, 4.60, 6.87):
-                m.block("Ceramic", (x, y, z), (.314, .202, .316), .032)
-                rivet(m, (x, y, z + .170), (0, 0, 1), .042)
-    for y in (2.50, 4.74, 7.14):
-        for z in (-1.20, 1.20):
-            m.block("Graphite", (0, y, z), (2.73, .19, .188), .037, axis=1)
-        for x in (-1.32, 1.32):
-            m.block("Graphite", (x, y, 0), (.195, .205, 2.50), .037, axis=1)
-    for z in (-1.18, 1.18):
-        for lower, high in ((.62, 2.36), (2.65, 4.64), (4.86, 6.95)):
-            m.tube("Alloy", (-1.31, lower, z), (1.31, high, z), .074, .072, 6, smooth=False)
-    for x in (-1.29, 1.29):
-        for z in (-1.0, 1.0):
-            m.block("Hazard", (x, 7.00, z), (.29, .143, .18), .041)
-        m.tube("Alloy", (x, 2.61, 1.16), (x, 4.62, -1.16), .073, .073, 6, smooth=False)
-        m.tube("Alloy", (x, 4.83, -1.16), (x, 6.95, 1.16), .073, .073, 6, smooth=False)
-    m.block("Alloy", (0, 7.212, 0), (3.48, .263, 3.245), .052, axis=1)
-    m.block("Graphite", (0, 7.102, 0), (3.51, .138, 3.285), .039, axis=1)
-    for j in range(12):
-        m.block("Steel", (0, 7.345, -1.395 + j * .253), (3.33, .013, .051), .004, axis=1)
-    for x in (-1.575, 1.575):
-        m.block("Hazard", (x, 7.367, 0), (.091, .015, 2.97), .004, axis=1)
-    return m
-
-
-def screen_rock():
-    m = Model("sandstone_screen", .27)
-    rng = Random(702)
-    perimeter = [(-1, -.70), (-.90, -1), (-.36, -.94), (.05, -1), (.51, -.92),
-                 (.86, -.98), (1, -.64), (1, .73), (.84, 1), (.32, .95), (-.14, 1),
-                 (-.62, .92), (-.89, 1), (-1, .65)]
-    rings = []
-    for height, width, depth in ((-.17, 7.45, 3.15), (1.48, 7.18, 3.14), (1.92, 7.09, 2.79),
-                                 (3.29, 7.21, 2.91), (3.77, 6.94, 2.60), (5.46, 7.13, 2.84),
-                                 (5.92, 6.96, 2.63), (7.02, 6.77, 2.53), (7.58, 6.29, 2.34),
-                                 (8.35, 5.49, 2.04), (8.89, 4.20, 1.57)):
-        rings.append([(x * width + rng.uniform(-.15, .15),
-                       height + rng.uniform(-.38, .43), z * depth + rng.uniform(-.16, .16))
-                      for x, z in perimeter])
-    for band, (bottom, top) in enumerate(zip(rings, rings[1:])):
-        for i in range(len(perimeter)):
-            j = (i + 1) % len(perimeter)
-            a, b, c, d = bottom[i], bottom[j], top[j], top[i]
-            facing = (a[0] + b[0], .22 if band > 3 else 0, a[2] + b[2])
-            finish = "StoneDark" if band in (1, 3, 5) and rng.random() > .12 else "Rock"
-            m.face(finish, [a, b, c], facing)
-            m.face(finish, [a, c, d], facing)
-    m.face("Rock", rings[-1], (0, 1, 0))
-    return m
-
-
-def mesa():
-    m = Model("tabletop_mesa", .86)
-    rng = Random(1829)
-    angles = [(i + rng.uniform(-.17, .17)) * pi / 8 for i in range(16)]
-    perimeter = [(cos(a) * rng.uniform(.46, .59), sin(a) * rng.uniform(.42, .59)) for a in angles]
-    rims = ((-.04, 1.18), (.17, 1.03), (.34, .91), (.42, .87), (.46, .77),
-            (.61, .74), (.67, .66), (.72, .69), (.94, .56), (.99, .43))
-    rings = []
-    for y, width in rims:
-        rings.append([(x * width + .09 * sin(y * 6.3), y + rng.uniform(-.052, .052), z * width)
-                      for x, z in perimeter])
-    sides = len(perimeter)
-    for band, (base, top) in enumerate(zip(rings, rings[1:])):
-        for i in range(sides):
-            j = (i + 1) % sides
-            a, b, c, d = base[i], base[j], top[j], top[i]
-            facing = (a[0] + b[0], .10, a[2] + b[2])
-            finish = "StoneDark" if band in (3, 6) else "Rock"
-            u = .26 * i
-            v = -rims[band][0] * 2.0
-            upper = -rims[band + 1][0] * 2.0
-            m.face(finish, [a, b, c, d], facing, uv=[(u, v), (u + .26, v), (u + .26, upper), (u, upper)])
-    m.face("Rock", rings[-1], (0, 1, 0))
-    return m
-
-
 def scrub():
     m = Model("ironleaf_scrub", 1.0)
     rng = Random(7103)
@@ -1239,8 +1279,9 @@ def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
     models = (rifle(), rifle_magazine(), rifle_hand(True), rifle_hand(False), repair_tool(), turret_base(), turret_head(), turret_emitters(), turret_cartridge(), turret_wreck(),
               beetle(), beetle_leg(-1), beetle_leg(1), beetle_leg(-1, foreclaw=True), beetle_leg(1, foreclaw=True),
-              beetle_tail(), beetle_tail(upper=True), wall(), blocker(), gate_panels(), relay(), station(),
-              supply_rack(), drone(), breach(), watchtower(), screen_rock(), mesa(), scrub(), approach_bastion(), *(canyon_formation(i) for i in range(3)), *(boulder(i) for i in range(1, 4)))
+              beetle_tail(), beetle_tail(upper=True), flying_beetle(), flying_beetle_tail(), flying_beetle_wing(),
+              wall(), blocker(), gate_panels(), relay(), station(),
+              supply_rack(), drone(), breach(), scrub(), approach_bastion(), *(canyon_formation(i) for i in range(3)), *(boulder(i) for i in range(1, 4)))
     for model in models:
         model.write()
 

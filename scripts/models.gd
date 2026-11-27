@@ -18,6 +18,7 @@ const ARMORY_NORMAL := preload("res://assets/art/materials/armory_normal.png")
 const ARMORY_ROUGHNESS := preload("res://assets/art/materials/armory_roughness.png")
 const CHITIN := preload("res://assets/art/materials/dune_chitin.png")
 const CHITIN_NORMAL := preload("res://assets/art/materials/dune_chitin_normal.png")
+const WING := preload("res://assets/art/materials/dune_wing.png")
 const CANYON_GRAVEL := preload("res://assets/art/materials/canyon_gravel.jpg")
 const CANYON_GRAVEL_NORMAL := preload("res://assets/art/materials/canyon_gravel_normal.png")
 const CANYON_GRAVEL_ROUGHNESS := preload("res://assets/art/materials/canyon_gravel_roughness.png")
@@ -49,6 +50,9 @@ const PARTS := {
 	&"claw_right": preload("res://assets/art/models/beetle_claw_right.glb"),
 	&"bug_tail": preload("res://assets/art/models/beetle_tail.glb"),
 	&"bug_sting": preload("res://assets/art/models/beetle_sting.glb"),
+	&"flyer": preload("res://assets/art/models/flying_beetle.glb"),
+	&"flyer_tail": preload("res://assets/art/models/flying_beetle_tail.glb"),
+	&"flyer_wing": preload("res://assets/art/models/flying_beetle_wing.glb"),
 	&"wall": preload("res://assets/art/models/wall_segment.glb"),
 	&"gate_frame": preload("res://assets/art/models/gate_frame.glb"),
 	&"gate_panels": preload("res://assets/art/models/gate_panels.glb"),
@@ -207,15 +211,20 @@ static func _finish(original: StandardMaterial3D) -> StandardMaterial3D:
 				material.normal_texture = ARMORY_NORMAL
 				material.normal_scale = 0.32
 				material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+			"DuneWing":
+				material.albedo_texture = WING
+				material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+				material.cull_mode = BaseMaterial3D.CULL_DISABLED
+				material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 			"DryLeaf", "RedLeaf":
 				material.cull_mode = BaseMaterial3D.CULL_DISABLED
 		if finish.ends_with("Lamp"):
 			material.emission_enabled = true
 			material.emission = material.albedo_color
-			if finish == "DuneSporeLamp":
-				material.emission_energy_multiplier = 1.65
-			elif finish == "TurretScanLamp":
+			if finish == "TurretScanLamp":
 				material.emission_energy_multiplier = 0.55
+			elif finish == "DuneEyeLamp":
+				material.emission_energy_multiplier = 0.84
 			else:
 				material.emission_energy_multiplier = 1.25
 		_finishes[finish] = material

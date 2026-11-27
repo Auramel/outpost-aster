@@ -4,9 +4,11 @@ config_version=5
 config/name="Форпост Астер"
 config/version="0.0.1"
 config/icon="res://assets/aster.png"
-run/main_scene="res://scenes/main_menu.tscn"
+run/main_scene="res://scenes/loading.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
-boot_splash/show_image=false
+boot_splash/bg_color=Color(0.043, 0.067, 0.102, 1)
+boot_splash/image="res://assets/aster.png"
+boot_splash/stretch_mode=0
 
 [display]
 window/size/mode=3

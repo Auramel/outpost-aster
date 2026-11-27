@@ -7,7 +7,6 @@ const TARGET := 4
 const ACCESS := 8
 const PLAYER := 16
 const SPAWN_SCREEN := 32
-const SAND := Color("#a48776")
 const CONCRETE := Color("#686f70")
 const METAL := Color("#353f4a")
 const DARK := Color("#19242e")
