@@ -1,0 +1,8 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/game.gd" id="1"]
+[ext_resource type="Resource" path="res://scenes/balance.tres" id="2"]
+
+[node name="OutpostAster" type="Node3D"]
+script = ExtResource("1")
+balance = ExtResource("2")
